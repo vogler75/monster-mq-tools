@@ -62,6 +62,8 @@ This repository includes pre-packaged agent instructions and skills located unde
 
 Agent guidelines and contribution rules are detailed in [`AGENTS.md`](AGENTS.md).
 
+For GraphQL schema parity and Edge broker adaptation specifications, see [`EDGE_BROKER_GRAPHQL_ADAPTATIONS.md`](EDGE_BROKER_GRAPHQL_ADAPTATIONS.md).
+
 ---
 
 ## License
