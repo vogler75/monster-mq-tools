@@ -88,8 +88,10 @@ Publish a message to a topic with QoS and retain flags.
 mutation PublishMessage($input: PublishInput!) {
   publish(input: $input) {
     success
-    message
     topic
+    timestamp
+    error
+    message
   }
 }
 ```
@@ -101,11 +103,12 @@ mutation PublishMessage($input: PublishInput!) {
     "topic": "sensors/temperature/room1",
     "payload": "{\"value\": 23.4, \"unit\": \"C\"}",
     "qos": 1,
-    "retain": true,
+    "retained": true,
     "format": "JSON"
   }
 }
 ```
+> **Note**: For retain flag compatibility across brokers, pass `"retained": true` (Main Broker standard) or `"retain": true` (Edge Broker).
 
 ### 3.2 Batch Publish Messages
 Publish multiple telemetry readings in a single HTTP POST request.
@@ -114,8 +117,10 @@ Publish multiple telemetry readings in a single HTTP POST request.
 mutation PublishBatchMessages($inputs: [PublishInput!]!) {
   publishBatch(inputs: $inputs) {
     success
-    message
     topic
+    timestamp
+    error
+    message
   }
 }
 ```
@@ -269,6 +274,7 @@ subscription OnTopicUpdate($filters: [String!]!) {
     format
     timestamp
     qos
+    retained
   }
 }
 ```
@@ -280,10 +286,14 @@ Batch real-time updates for high-frequency topics into single WebSocket frames.
 subscription OnTopicUpdateBulk($filters: [String!]!, $timeoutMs: Int = 500, $maxSize: Int = 50) {
   topicUpdatesBulk(topicFilters: $filters, format: JSON, timeoutMs: $timeoutMs, maxSize: $maxSize) {
     count
-    messages {
+    timestamp
+    updates {
       topic
       payload
+      format
       timestamp
+      qos
+      retained
     }
   }
 }
@@ -343,6 +353,8 @@ function subscribeToBrokerTopics(topicFilters, onMessageCallback) {
                 topic
                 payload
                 timestamp
+                qos
+                retained
               }
             }
           `,
