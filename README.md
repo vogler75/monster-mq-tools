@@ -76,10 +76,10 @@ Current GraphQL SDL schemas are stored under [`gql/`](gql/):
 To fetch and update both schemas from running broker instances:
 
 ```bash
-./scripts/fetch-schemas.sh
+./gql/fetch-schemas.sh
 ```
 
-*(Optional parameters: `./scripts/fetch-schemas.sh <main-url> <edge-url>` or via `MAIN_URL` and `EDGE_URL` environment variables).*
+*(Optional parameters: `./gql/fetch-schemas.sh <main-url> <edge-url>` or via `MAIN_URL` and `EDGE_URL` environment variables).*
 
 ---
 

@@ -8,8 +8,7 @@ MAIN_URL="${MAIN_URL:-${1:-http://localhost:4000/graphql}}"
 EDGE_URL="${EDGE_URL:-${2:-http://localhost:4001/graphql}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="$ROOT_DIR/gql"
+OUTPUT_DIR="$SCRIPT_DIR"
 
 mkdir -p "$OUTPUT_DIR"
 
