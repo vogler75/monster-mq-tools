@@ -9,6 +9,7 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 - [`cli/`](file:///Users/vogler/Workspace/monster/cli/cli): The official Go command-line tool `mmqcli` for MonsterMQ GraphQL interfaces.
 - [`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)
 - [`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)
+- [`monstermq-graphql`](.agents/skills/monstermq-graphql/SKILL.md)
 
 ---
 

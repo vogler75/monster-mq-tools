@@ -58,6 +58,7 @@ For full CLI documentation, global flags, environment configuration, and detaile
 This repository includes pre-packaged agent instructions and skills located under [`.agents/skills/`](.agents/skills/):
 - **[`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)**: Operational guide and CLI reference for `mmqcli`.
 - **[`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)**: Architecture patterns and guidelines for creating HTML/JS HMI screens and industrial dashboards hosted by MonsterMQ Edge.
+- **[`monstermq-graphql`](.agents/skills/monstermq-graphql/SKILL.md)**: Data GraphQL API guide for querying topic values, publishing messages, inspecting archive groups, history data, time-series aggregations, and WebSockets.
 
 Agent guidelines and contribution rules are detailed in [`AGENTS.md`](AGENTS.md).
 
