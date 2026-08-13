@@ -66,6 +66,23 @@ For GraphQL schema parity and Edge broker adaptation specifications, see [`EDGE_
 
 ---
 
+## GraphQL Schemas & Utilities
+
+Current GraphQL SDL schemas are stored under [`gql/`](gql/):
+- **[`gql/main.gql`](gql/main.gql)**: Main Broker GraphQL schema (`http://localhost:4000/graphql`).
+- **[`gql/edge.gql`](gql/edge.gql)**: Edge Broker GraphQL schema (`http://localhost:4001/graphql`).
+
+### Re-fetching Schemas
+To fetch and update both schemas from running broker instances:
+
+```bash
+./scripts/fetch-schemas.sh
+```
+
+*(Optional parameters: `./scripts/fetch-schemas.sh <main-url> <edge-url>` or via `MAIN_URL` and `EDGE_URL` environment variables).*
+
+---
+
 ## License
 
 MonsterMQ Tools is licensed under the terms included in the [LICENSE](LICENSE) file.
