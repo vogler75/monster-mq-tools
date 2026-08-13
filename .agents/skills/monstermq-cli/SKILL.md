@@ -1,5 +1,5 @@
 ---
-name: mmqcli
+name: monstermq-cli
 description: Comprehensive operational guide and CLI reference for mmqcli (MonsterMQ CLI tool). Use this skill when interacting with, testing, or building features for Full MonsterMQ Broker or MonsterMQ Edge Broker instances.
 ---
 

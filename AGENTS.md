@@ -7,7 +7,8 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 ## Repository Structure
 
 - [`cli/`](file:///Users/vogler/Workspace/monster/cli/cli): The official Go command-line tool `mmqcli` for MonsterMQ GraphQL interfaces.
-- [`.agents/skills/`](file:///Users/vogler/Workspace/monster/cli/.agents/skills): Agent skills and runbooks for MonsterMQ tools (`mmqcli`, `monstermq-hmi-builder`).
+- [`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)
+- [`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)
 
 ---
 
@@ -16,7 +17,7 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 Whenever you modify, add, or deprecate any feature, command, flag, or configuration option in `mmqcli` or any tool in this repository:
 
 1. **Skill File Maintenance**: You **MUST** update the corresponding skill instruction file located at:
-   - [`.agents/skills/mmqcli/SKILL.md`](.agents/skills/mmqcli/SKILL.md)
+   - [`.agents/skills/monstermq-cli/SKILL.md`](.agents/skills/monstermq-cli/SKILL.md)
    
    Ensure that all newly introduced commands, flags, aliases, environment variables, or broker capabilities are accurately documented in `SKILL.md`.
 
