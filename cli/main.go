@@ -22,28 +22,32 @@ Global Options:
   --json              Output raw JSON results
 
 Commands:
-  get-value <topic>                           Get current/retained value for a topic
-  set-value <topic> <payload> [--retain]     Publish payload to a topic
-  list-topics [pattern]                       Search/list active topics
-  list-archives                               List all deployed archive groups
-  archive-stats <group>                       Get stats for an archive group (--start, --end, --last-seconds)
-  query-history <topic>                       Query historical messages for a topic
-  query-aggregated <topics...>                Query aggregated time-series data
-  features                                    List enabled broker features
-  device list                                 List all configured devices/subsystems
-  device download [name] [file]               Download device configuration JSON
-  device upload <file>                        Upload device configuration JSON file
-  device enable <name>                        Enable a device configuration
-  device disable <name>                       Disable a device configuration
+  searchTopics [pattern]                      Search active topics (globs *, SQL %, MQTT #)
+  currentValue <topic>                        Get current/retained value for a topic
+  currentValues <filter>                      Get current values matching a topic filter
+  retainedMessages [filter]                   List retained messages matching a topic filter
+  browseTopics [path]                         Browse topic hierarchy level-by-level
+  publish <topic> <payload>                   Publish payload to a topic (--retain, --qos)
+  archivedMessages <topic>                    Query historical time-series messages
+  aggregatedMessages <topics...>              Query aggregated time-series metric data
+  archiveGroups                               List all deployed archive storage groups
+  archiveStats <group>                        Get stats for an archive group
+  systemLogs                                  View broker system log entries
+  sessions                                    List active MQTT client sessions
+  session <clientId>                          Inspect specific client session details
+  currentUser                                 Get authenticated user and role info
+  databaseConnections                         List configured database connections
+  hmis                                        List deployed HMI web dashboards
+  exportHmiZip <name>                         Export HMI dashboard package
+  brokerConfig                                List enabled broker features & capabilities
+  device list|download|upload|enable|disable Manage edge devices
 
 Examples:
-  mmqcli --url http://localhost:4000/graphql get-value sensors/temp/room1
-  mmqcli set-value sensors/temp/room1 '{"temp": 22.5}' --retain
-  mmqcli query-history sensors/temp/room1 --last-seconds 3600
-  mmqcli features
-  mmqcli device list
-  mmqcli device download MyDevice device.json
-  mmqcli device upload device.json
+  mmqcli --url http://localhost:4000/graphql searchTopics "*Watt*"
+  mmqcli --url http://localhost:4000/graphql currentValue sensors/temp/room1
+  mmqcli publish sensors/temp/room1 '{"temp": 22.5}' --retain
+  mmqcli archivedMessages sensors/temp/room1 --last-seconds 3600
+  mmqcli brokerConfig
 `
 
 func main() {
@@ -101,22 +105,55 @@ func main() {
 
 	var err error
 	switch subcmd {
-	case "get-value", "get":
+	case "get-value", "get", "currentValue":
 		err = runGetValue(ctx, client, subargs)
+	case "get-values", "current-values", "currentValues":
+		err = runGetValues(ctx, client, subargs)
 	case "set-value", "publish":
 		err = runSetValue(ctx, client, subargs)
-	case "list-topics", "search-topics":
+	case "list-topics", "search-topics", "find-topics", "searchTopics":
 		err = runListTopics(ctx, client, subargs)
-	case "list-archives":
+	case "browse-topics", "browse", "browseTopics":
+		err = runBrowseTopics(ctx, client, subargs)
+	case "list-retained", "retained", "retainedMessages":
+		err = runListRetained(ctx, client, subargs)
+	case "list-archives", "archiveGroups":
 		err = runListArchives(ctx, client, subargs)
-	case "archive-stats":
+	case "archive-stats", "archiveStats":
 		err = runArchiveStats(ctx, client, subargs)
-	case "query-history", "history":
+	case "query-history", "history", "archivedMessages":
 		err = runQueryHistory(ctx, client, subargs)
-	case "query-aggregated", "aggregated":
+	case "query-aggregated", "aggregated", "aggregatedMessages":
 		err = runQueryAggregated(ctx, client, subargs)
-	case "features", "enabled-features", "list-features":
+	case "logs", "system-logs", "systemLogs":
+		err = runLogs(ctx, client, subargs)
+	case "hmi", "hmis":
+		err = runHmiList(ctx, client, subargs)
+	case "session", "sessions":
+		if len(subargs) == 0 {
+			err = runSessionList(ctx, client, nil)
+		} else {
+			action := subargs[0]
+			actionArgs := subargs[1:]
+			switch action {
+			case "list", "ls":
+				err = runSessionList(ctx, client, actionArgs)
+			case "inspect", "get", "show":
+				err = runSessionInspect(ctx, client, actionArgs)
+			case "remove", "delete", "rm", "kill":
+				err = runSessionRemove(ctx, client, actionArgs)
+			default:
+				err = fmt.Errorf("unknown session action '%s' (use 'list', 'inspect', or 'remove')", action)
+			}
+		}
+	case "features", "enabled-features", "list-features", "brokerConfig":
 		err = runListFeatures(ctx, client, subargs)
+	case "currentUser", "current-user", "whoami":
+		err = runCurrentUser(ctx, client, subargs)
+	case "databaseConnections", "database-connections", "db":
+		err = runDatabaseConnections(ctx, client, subargs)
+	case "exportHmiZip", "export-hmi-zip":
+		err = runExportHmiZip(ctx, client, subargs)
 	case "device", "devices":
 		if len(subargs) == 0 {
 			err = runDeviceList(ctx, client, nil)

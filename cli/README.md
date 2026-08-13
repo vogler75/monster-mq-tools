@@ -154,16 +154,55 @@ mmqcli set-value <topic> <payload> [--retain] [--qos 0|1|2]
 mmqcli set-value sensors/temp/room1 '{"temp": 22.5, "unit": "C"}' --retain --qos 1
 ```
 
-#### `list-topics` (alias: `search-topics`)
-Search active topics matching an MQTT pattern or wildcard.
+#### `list-topics` (aliases: `searchTopics`, `search-topics`, `find-topics`)
+Search active topics matching a pattern or wildcard across both the persistent archive store and live retained message store. Automatically handles glob patterns (`*Watt*`), SQL LIKE syntax (`%Watt%`), and MQTT topic filters (`sensors/#`).
 
 ```bash
 mmqcli list-topics [pattern] [--limit N] [--archive-group GroupName]
 ```
 
-*Example:*
+#### `get-values` (alias: `current-values`)
+Fetch current topic values matching an MQTT topic filter pattern.
+
 ```bash
-mmqcli list-topics "sensors/#" --limit 50
+mmqcli get-values <topic-filter> [--limit N] [--archive-group GroupName]
+```
+
+#### `list-retained` (alias: `retained`)
+List all retained messages matching a topic filter pattern.
+
+```bash
+mmqcli list-retained [topic-filter] [--limit N]
+```
+
+#### `browse-topics` (alias: `browse`)
+Hierarchically browse topic levels.
+
+```bash
+mmqcli browse-topics [path] [--archive-group GroupName]
+```
+
+#### `session` (subcommands: `list`, `inspect`, `remove`)
+Manage connected MQTT client sessions.
+
+```bash
+mmqcli session list
+mmqcli session inspect <clientId>
+mmqcli session remove <clientId...>
+```
+
+#### `logs` (alias: `system-logs`)
+View broker system logs.
+
+```bash
+mmqcli logs [--last-minutes N] [--limit N]
+```
+
+#### `hmi` (alias: `hmis`)
+List deployed HMI web dashboards hosted by MonsterMQ.
+
+```bash
+mmqcli hmi list
 ```
 
 ---

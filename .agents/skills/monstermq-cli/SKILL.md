@@ -33,37 +33,26 @@ mmqcli --url <endpoint-url> features
 
 ## Command Reference
 
-### Topic Operations
-- **Get Retained/Current Topic Value**:
-  ```bash
-  mmqcli get-value <topic> [--archive-group GroupName]
-  ```
-- **Publish Payload**:
-  ```bash
-  mmqcli set-value <topic> <payload> [--retain] [--qos 0|1|2]
-  ```
-- **Search Active Topics**:
-  ```bash
-  mmqcli list-topics [pattern] [--limit N] [--archive-group GroupName]
-  ```
-
-### Historical & Time-Series Data (Full Broker / Configured Edge)
-- **List Archive Groups**:
-  ```bash
-  mmqcli list-archives
-  ```
-- **Archive Statistics**:
-  ```bash
-  mmqcli archive-stats <group> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N]
-  ```
-- **Query Message History**:
-  ```bash
-  mmqcli query-history <topic> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N] [--limit N] [--archive-group GroupName]
-  ```
-- **Query Time-Series Aggregations**:
-  ```bash
-  mmqcli query-aggregated <topics...> [--interval ONE_MINUTE|FIVE_MINUTES|FIFTEEN_MINUTES|ONE_HOUR|ONE_DAY] [--functions AVG,MIN,MAX,COUNT] [--last-seconds N]
-  ```
+### 1:1 GraphQL Commands
+`mmqcli` maps 1:1 to MonsterMQ GraphQL functions:
+- **`searchTopics [pattern]`**: Search active topics (globs `*`, SQL `%`, MQTT `#`)
+- **`currentValue <topic>`**: Get current or retained value for a single topic
+- **`currentValues <filter>`**: Get current values matching a topic filter
+- **`retainedMessages [filter]`**: List retained messages matching a topic filter
+- **`browseTopics [path]`**: Browse topic hierarchy level-by-level
+- **`publish <topic> <payload>`**: Publish message payload (`--retain`, `--qos 0|1|2`)
+- **`archivedMessages <topic>`**: Query historical time-series messages
+- **`aggregatedMessages <topics...>`**: Query server-side time-series aggregations (`AVG`, `MIN`, `MAX`)
+- **`archiveGroups`**: List all deployed archive storage groups
+- **`archiveStats <group>`**: Get stats for an archive group
+- **`systemLogs`**: View broker system log entries (`--last-minutes N`)
+- **`sessions`**: List active MQTT client sessions
+- **`session <clientId>`**: Inspect specific client session details
+- **`currentUser`**: Get authenticated user and role info
+- **`databaseConnections`**: List configured database connections
+- **`hmis`**: List deployed HMI web dashboards
+- **`exportHmiZip <name>`**: Export HMI dashboard package
+- **`brokerConfig`**: List enabled broker features & capabilities
 
 ### Device & Edge Management
 - **List Devices**: `mmqcli device list`

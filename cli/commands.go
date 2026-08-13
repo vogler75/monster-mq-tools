@@ -186,40 +186,100 @@ func runListTopics(ctx context.Context, client *Client, args []string) error {
 		}
 	}
 
-	query := `
-		query ListTopics($pattern: String!, $limit: Int, $archiveGroup: String) {
+	// Normalize wildcard syntax for SQL LIKE queries (% and _)
+	sqlPattern := pattern
+	if strings.Contains(sqlPattern, "*") {
+		sqlPattern = strings.ReplaceAll(sqlPattern, "*", "%")
+	} else if sqlPattern != "#" && sqlPattern != "%" && !strings.Contains(sqlPattern, "%") {
+		sqlPattern = "%" + sqlPattern + "%"
+	}
+
+	// Extract search substring for case-insensitive client-side filtering
+	searchTerm := strings.Trim(pattern, "*%#")
+
+	topicSet := make(map[string]bool)
+	var matchedTopics []string
+
+	// 1. Query searchTopics (Database Archive Store)
+	searchTopicsQuery := `
+		query SearchTopics($pattern: String!, $limit: Int, $archiveGroup: String) {
 			searchTopics(pattern: $pattern, limit: $limit, archiveGroup: $archiveGroup)
 		}
 	`
-	var res struct {
+	var stRes struct {
 		Data struct {
 			SearchTopics []string `json:"searchTopics"`
 		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
 	}
-
-	if err := client.DoQuery(ctx, query, map[string]any{
-		"pattern":      pattern,
+	if err := client.DoQuery(ctx, searchTopicsQuery, map[string]any{
+		"pattern":      sqlPattern,
 		"limit":        limit,
 		"archiveGroup": archiveGroup,
-	}, &res); err != nil {
-		return err
+	}, &stRes); err == nil {
+		for _, t := range stRes.Data.SearchTopics {
+			if t != "" && !topicSet[t] {
+				topicSet[t] = true
+				matchedTopics = append(matchedTopics, t)
+			}
+		}
 	}
-	if len(res.Errors) > 0 {
-		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+
+	// 2. Query retainedMessages (Live Retained RAM Store)
+	retainedFilter := "#"
+	if strings.Contains(pattern, "/") && !strings.Contains(pattern, "*") && !strings.Contains(pattern, "%") {
+		retainedFilter = pattern
+	}
+	retainedQuery := `
+		query RetainedTopics($filter: String, $limit: Int) {
+			retainedMessages(topicFilter: $filter, limit: $limit) {
+				topic
+			}
+		}
+	`
+	var rmRes struct {
+		Data struct {
+			RetainedMessages []struct {
+				Topic string `json:"topic"`
+			} `json:"retainedMessages"`
+		} `json:"data"`
+	}
+	if err := client.DoQuery(ctx, retainedQuery, map[string]any{
+		"filter": retainedFilter,
+		"limit":  limit,
+	}, &rmRes); err == nil {
+		for _, rm := range rmRes.Data.RetainedMessages {
+			if rm.Topic != "" && !topicSet[rm.Topic] {
+				if isTopicMatch(rm.Topic, pattern, searchTerm) {
+					topicSet[rm.Topic] = true
+					matchedTopics = append(matchedTopics, rm.Topic)
+				}
+			}
+		}
+	}
+
+	if limit > 0 && len(matchedTopics) > limit {
+		matchedTopics = matchedTopics[:limit]
 	}
 
 	if client.cfg.JSONMode {
-		return printJSON(res.Data.SearchTopics)
+		return printJSON(matchedTopics)
 	}
 
-	fmt.Printf("Found %d topics matching '%s':\n", len(res.Data.SearchTopics), pattern)
-	for _, t := range res.Data.SearchTopics {
+	fmt.Printf("Found %d topics matching '%s':\n", len(matchedTopics), pattern)
+	for _, t := range matchedTopics {
 		fmt.Println(" -", t)
 	}
 	return nil
+}
+
+func isTopicMatch(topic, pattern, searchTerm string) bool {
+	if pattern == "#" || pattern == "%" || pattern == "*" || pattern == "" {
+		return true
+	}
+	if searchTerm != "" {
+		return strings.Contains(strings.ToLower(topic), strings.ToLower(searchTerm))
+	}
+	return true
 }
 
 func runListArchives(ctx context.Context, client *Client, args []string) error {
@@ -985,5 +1045,638 @@ func printJSON(v any) error {
 		return err
 	}
 	fmt.Println(string(bytes))
+	return nil
+}
+
+func runGetValues(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: mmqcli get-values <topic-filter> [--limit N] [--archive-group Default]")
+	}
+	filter := args[0]
+	limit := 100
+	archiveGroup := "Default"
+
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--limit":
+			if i+1 < len(args) {
+				limit, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--archive-group":
+			if i+1 < len(args) {
+				archiveGroup = args[i+1]
+				i++
+			}
+		}
+	}
+
+	query := `
+		query GetValues($filter: String!, $limit: Int, $archiveGroup: String) {
+			currentValues(topicFilter: $filter, limit: $limit, archiveGroup: $archiveGroup) {
+				topic
+				payload
+				format
+				timestamp
+				qos
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			CurrentValues []struct {
+				Topic     string `json:"topic"`
+				Payload   string `json:"payload"`
+				Format    string `json:"format"`
+				Timestamp int64  `json:"timestamp"`
+				QoS       int    `json:"qos"`
+			} `json:"currentValues"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{
+		"filter":       filter,
+		"limit":        limit,
+		"archiveGroup": archiveGroup,
+	}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.CurrentValues)
+	}
+
+	fmt.Printf("Found %d values matching '%s':\n", len(res.Data.CurrentValues), filter)
+	for _, val := range res.Data.CurrentValues {
+		fmt.Printf(" - Topic:     %s\n", val.Topic)
+		fmt.Printf("   Payload:   %s\n", val.Payload)
+		fmt.Printf("   Timestamp: %d\n", val.Timestamp)
+	}
+	return nil
+}
+
+func runListRetained(ctx context.Context, client *Client, args []string) error {
+	filter := "#"
+	limit := 100
+
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		filter = args[0]
+	}
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--limit" && i+1 < len(args) {
+			limit, _ = strconv.Atoi(args[i+1])
+			i++
+		}
+	}
+
+	query := `
+		query ListRetained($filter: String, $limit: Int) {
+			retainedMessages(topicFilter: $filter, limit: $limit) {
+				topic
+				payload
+				format
+				timestamp
+				qos
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			RetainedMessages []struct {
+				Topic     string `json:"topic"`
+				Payload   string `json:"payload"`
+				Format    string `json:"format"`
+				Timestamp int64  `json:"timestamp"`
+				QoS       int    `json:"qos"`
+			} `json:"retainedMessages"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{
+		"filter": filter,
+		"limit":  limit,
+	}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.RetainedMessages)
+	}
+
+	fmt.Printf("Found %d retained messages matching '%s':\n", len(res.Data.RetainedMessages), filter)
+	for _, rm := range res.Data.RetainedMessages {
+		fmt.Printf(" - Topic:     %s\n", rm.Topic)
+		fmt.Printf("   Payload:   %s\n", rm.Payload)
+		fmt.Printf("   Timestamp: %d\n", rm.Timestamp)
+	}
+	return nil
+}
+
+func runBrowseTopics(ctx context.Context, client *Client, args []string) error {
+	topic := "+"
+	archiveGroup := "Default"
+
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		topic = args[0]
+	}
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--archive-group" && i+1 < len(args) {
+			archiveGroup = args[i+1]
+			i++
+		}
+	}
+
+	// Normalize pattern if user passed glob wildcards (* -> +)
+	if strings.Contains(topic, "*") {
+		topic = strings.ReplaceAll(topic, "*", "+")
+		topic = strings.Trim(topic, "+")
+		if topic == "" {
+			topic = "+"
+		} else {
+			topic = topic + "/+"
+		}
+	}
+
+	query := `
+		query BrowseTopics($topic: String!, $archiveGroup: String) {
+			browseTopics(topic: $topic, archiveGroup: $archiveGroup) {
+				name
+				value {
+					payload
+					timestamp
+				}
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			BrowseTopics []struct {
+				Name  string `json:"name"`
+				Value *struct {
+					Payload   string `json:"payload"`
+					Timestamp int64  `json:"timestamp"`
+				} `json:"value"`
+			} `json:"browseTopics"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{
+		"topic":        topic,
+		"archiveGroup": archiveGroup,
+	}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.BrowseTopics)
+	}
+
+	fmt.Printf("Topic hierarchy at '%s':\n", topic)
+	for _, t := range res.Data.BrowseTopics {
+		valStr := ""
+		if t.Value != nil && t.Value.Payload != "" {
+			valStr = fmt.Sprintf(" = %s", t.Value.Payload)
+		}
+		fmt.Printf(" - %s%s\n", t.Name, valStr)
+	}
+	return nil
+}
+
+func runSessionList(ctx context.Context, client *Client, args []string) error {
+	query := `
+		query ListSessions {
+			sessions {
+				clientId
+				nodeId
+				connected
+				clientAddress
+				queuedMessageCount
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			Sessions []struct {
+				ClientId           string `json:"clientId"`
+				NodeId             string `json:"nodeId"`
+				Connected          bool   `json:"connected"`
+				ClientAddress      string `json:"clientAddress"`
+				QueuedMessageCount int64  `json:"queuedMessageCount"`
+			} `json:"sessions"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, nil, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.Sessions)
+	}
+
+	fmt.Printf("%-28s %-12s %-20s %s\n", "CLIENT ID", "STATUS", "ADDRESS", "QUEUED")
+	fmt.Println(strings.Repeat("-", 70))
+	for _, s := range res.Data.Sessions {
+		status := "DISCONNECTED"
+		if s.Connected {
+			status = "CONNECTED"
+		}
+		fmt.Printf("%-28s %-12s %-20s %d\n", s.ClientId, status, s.ClientAddress, s.QueuedMessageCount)
+	}
+	return nil
+}
+
+func runSessionInspect(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: mmqcli session inspect <clientId>")
+	}
+	clientId := args[0]
+
+	query := `
+		query GetSession($clientId: String!) {
+			session(clientId: $clientId) {
+				clientId
+				nodeId
+				connected
+				cleanSession
+				clientAddress
+				protocolVersion
+				queuedMessageCount
+				subscriptions {
+					topicFilter
+					qos
+				}
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			Session *struct {
+				ClientId           string `json:"clientId"`
+				NodeId             string `json:"nodeId"`
+				Connected          bool   `json:"connected"`
+				CleanSession       bool   `json:"cleanSession"`
+				ClientAddress      string `json:"clientAddress"`
+				ProtocolVersion    int    `json:"protocolVersion"`
+				QueuedMessageCount int64  `json:"queuedMessageCount"`
+				Subscriptions      []struct {
+					TopicFilter string `json:"topicFilter"`
+					QoS         int    `json:"qos"`
+				} `json:"subscriptions"`
+			} `json:"session"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{"clientId": clientId}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.Session)
+	}
+	if res.Data.Session == nil {
+		fmt.Printf("No session found for Client ID '%s'\n", clientId)
+		return nil
+	}
+
+	s := res.Data.Session
+	fmt.Printf("Client ID:       %s\n", s.ClientId)
+	fmt.Printf("Node ID:         %s\n", s.NodeId)
+	fmt.Printf("Connected:       %t\n", s.Connected)
+	fmt.Printf("Clean Session:   %t\n", s.CleanSession)
+	fmt.Printf("Client Address:  %s\n", s.ClientAddress)
+	fmt.Printf("Protocol Ver:    v%d\n", s.ProtocolVersion)
+	fmt.Printf("Queued Messages: %d\n", s.QueuedMessageCount)
+	fmt.Println("Subscriptions:")
+	for _, sub := range s.Subscriptions {
+		fmt.Printf(" - %s (QoS %d)\n", sub.TopicFilter, sub.QoS)
+	}
+	return nil
+}
+
+func runSessionRemove(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: mmqcli session remove <clientId1> [clientId2...]")
+	}
+
+	query := `
+		mutation RemoveSessions($clientIds: [String!]!) {
+			sessions {
+				removeSessions(clientIds: $clientIds) {
+					details {
+						clientId
+						success
+					}
+				}
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			Sessions struct {
+				RemoveSessions struct {
+					Details []struct {
+						ClientId string `json:"clientId"`
+						Success  bool   `json:"success"`
+					} `json:"details"`
+				} `json:"removeSessions"`
+			} `json:"sessions"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{"clientIds": args}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.Sessions.RemoveSessions.Details)
+	}
+
+	for _, d := range res.Data.Sessions.RemoveSessions.Details {
+		status := "failed"
+		if d.Success {
+			status = "removed"
+		}
+		fmt.Printf("Session '%s': %s\n", d.ClientId, status)
+	}
+	return nil
+}
+
+func runLogs(ctx context.Context, client *Client, args []string) error {
+	limit := 50
+	lastMinutes := 60
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--limit":
+			if i+1 < len(args) {
+				limit, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		case "--last-minutes":
+			if i+1 < len(args) {
+				lastMinutes, _ = strconv.Atoi(args[i+1])
+				i++
+			}
+		}
+	}
+
+	query := `
+		query GetLogs($lastMinutes: Int, $limit: Int) {
+			systemLogs(lastMinutes: $lastMinutes, limit: $limit) {
+				timestamp
+				level
+				message
+				logger
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			SystemLogs []struct {
+				Timestamp string `json:"timestamp"`
+				Level     string `json:"level"`
+				Message   string `json:"message"`
+				Logger    string `json:"logger"`
+			} `json:"systemLogs"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{
+		"lastMinutes": lastMinutes,
+		"limit":       limit,
+	}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.SystemLogs)
+	}
+
+	fmt.Printf("System logs (last %d mins, max %d entries):\n", lastMinutes, limit)
+	for _, l := range res.Data.SystemLogs {
+		fmt.Printf("[%s] [%-5s] [%s] %s\n", l.Timestamp, l.Level, l.Logger, l.Message)
+	}
+	return nil
+}
+
+func runHmiList(ctx context.Context, client *Client, args []string) error {
+	query := `
+		query ListHmis {
+			hmis {
+				name
+				nodeId
+				description
+				mainDashboard
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			Hmis []struct {
+				Name          string `json:"name"`
+				NodeId        string `json:"nodeId"`
+				Description   string `json:"description"`
+				MainDashboard bool   `json:"mainDashboard"`
+			} `json:"hmis"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, nil, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.Hmis)
+	}
+
+	if len(res.Data.Hmis) == 0 {
+		fmt.Println("No HMI dashboards found on broker")
+		return nil
+	}
+
+	fmt.Println("DEPLOYED HMI DASHBOARDS")
+	fmt.Println(strings.Repeat("-", 50))
+	for _, h := range res.Data.Hmis {
+		mainBadge := ""
+		if h.MainDashboard {
+			mainBadge = " [MAIN]"
+		}
+		fmt.Printf(" - %s%s (Node: %s)\n", h.Name, mainBadge, h.NodeId)
+		if h.Description != "" {
+			fmt.Printf("   Description: %s\n", h.Description)
+		}
+	}
+	return nil
+}
+
+func runCurrentUser(ctx context.Context, client *Client, args []string) error {
+	query := `
+		query {
+			currentUser {
+				username
+				roles
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			CurrentUser *struct {
+				Username string   `json:"username"`
+				Roles    []string `json:"roles"`
+			} `json:"currentUser"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, nil, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.CurrentUser)
+	}
+
+	if res.Data.CurrentUser == nil {
+		fmt.Println("Not authenticated (anonymous user)")
+		return nil
+	}
+
+	fmt.Printf("User: %s\n", res.Data.CurrentUser.Username)
+	if len(res.Data.CurrentUser.Roles) > 0 {
+		fmt.Printf("Roles: %s\n", strings.Join(res.Data.CurrentUser.Roles, ", "))
+	}
+	return nil
+}
+
+func runDatabaseConnections(ctx context.Context, client *Client, args []string) error {
+	query := `
+		query {
+			databaseConnections {
+				name
+				type
+				status
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			DatabaseConnections []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+				Status string `json:"status"`
+			} `json:"databaseConnections"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, nil, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data.DatabaseConnections)
+	}
+
+	fmt.Printf("%-24s %-16s %s\n", "NAME", "TYPE", "STATUS")
+	fmt.Println(strings.Repeat("-", 50))
+	for _, db := range res.Data.DatabaseConnections {
+		fmt.Printf("%-24s %-16s %s\n", db.Name, db.Type, db.Status)
+	}
+	return nil
+}
+
+func runExportHmiZip(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: mmqcli hmi export <dashboard-name>")
+	}
+	name := args[0]
+
+	query := `
+		query ExportHmiZip($name: String!) {
+			exportHmiZip(name: $name)
+		}
+	`
+	var res struct {
+		Data struct {
+			ExportHmiZip string `json:"exportHmiZip"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{"name": name}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(res.Data)
+	}
+
+	fmt.Printf("HMI Zip Export string: %s\n", res.Data.ExportHmiZip)
 	return nil
 }
