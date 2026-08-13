@@ -1,10 +1,12 @@
 # Binaries and build artifacts
 bin/
+cli/bin/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
+/cli/mmqcli
 /mmqcli
 
 # Test and coverage artifacts
