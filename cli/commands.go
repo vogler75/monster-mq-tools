@@ -211,11 +211,12 @@ func runListTopics(ctx context.Context, client *Client, args []string) error {
 			SearchTopics []string `json:"searchTopics"`
 		} `json:"data"`
 	}
-	if err := client.DoQuery(ctx, searchTopicsQuery, map[string]any{
+	stErr := client.DoQuery(ctx, searchTopicsQuery, map[string]any{
 		"pattern":      sqlPattern,
 		"limit":        limit,
 		"archiveGroup": archiveGroup,
-	}, &stRes); err == nil {
+	}, &stRes)
+	if stErr == nil {
 		for _, t := range stRes.Data.SearchTopics {
 			if t != "" && !topicSet[t] {
 				topicSet[t] = true
@@ -243,10 +244,11 @@ func runListTopics(ctx context.Context, client *Client, args []string) error {
 			} `json:"retainedMessages"`
 		} `json:"data"`
 	}
-	if err := client.DoQuery(ctx, retainedQuery, map[string]any{
+	rmErr := client.DoQuery(ctx, retainedQuery, map[string]any{
 		"filter": retainedFilter,
 		"limit":  limit,
-	}, &rmRes); err == nil {
+	}, &rmRes)
+	if rmErr == nil {
 		for _, rm := range rmRes.Data.RetainedMessages {
 			if rm.Topic != "" && !topicSet[rm.Topic] {
 				if isTopicMatch(rm.Topic, pattern, searchTerm) {
@@ -255,6 +257,10 @@ func runListTopics(ctx context.Context, client *Client, args []string) error {
 				}
 			}
 		}
+	}
+
+	if stErr != nil && rmErr != nil {
+		return stErr
 	}
 
 	if limit > 0 && len(matchedTopics) > limit {
@@ -973,10 +979,12 @@ func setDeviceEnabled(ctx context.Context, client *Client, args []string, enable
 				} `json:"mqttClient"`
 			} `json:"data"`
 		}
-		_ = client.DoQuery(ctx, toggleGql, map[string]any{
+		if err := client.DoQuery(ctx, toggleGql, map[string]any{
 			"name":    name,
 			"enabled": enabled,
-		}, &toggleRes)
+		}, &toggleRes); err != nil {
+			return err
+		}
 	}
 
 	statusStr := "enabled"

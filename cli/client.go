@@ -199,7 +199,7 @@ func (c *Client) rawDo(ctx context.Context, query string, variables map[string]a
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot connect to GraphQL server at %s: %w", c.cfg.URL, err)
 	}
 	defer resp.Body.Close()
 
