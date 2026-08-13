@@ -1,0 +1,36 @@
+# Binaries and build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+mmqcli
+
+# Test and coverage artifacts
+*.test
+*.out
+*.prof
+coverage.txt
+profile.out
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+
+# Environment and local configs
+.env
+.env.local
