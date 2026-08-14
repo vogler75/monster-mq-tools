@@ -13,6 +13,7 @@ This repository provides command-line tools and utilities designed to simplify a
 | Directory | Tool | Description | Supported Brokers |
 | :--- | :--- | :--- | :--- |
 | [`/cli`](cli) | **MonsterMQ CLI (`mmq`)** | Go interactive REPL shell and command-line interface for GraphQL operations, real-time message publishing/subscribing, topic discovery, historical/TSDB metric querying, and device/client management. | Full Broker & Edge Broker |
+| [`/hmi`](hmi) | **Edge HMI Dashboards** | Standalone web HMIs and industrial dashboard applications hosted and served directly by MonsterMQ Edge brokers. | Edge Broker |
 
 ---
 
