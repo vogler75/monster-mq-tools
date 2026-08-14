@@ -24,7 +24,16 @@ This skill provides comprehensive instructions, architecture patterns, UI design
 
 ## 2. Broker Data Access (GraphQL API)
 
-All HMIs communicate directly with the broker's GraphQL endpoint (`/graphql`) over HTTP (`POST /graphql`) and WebSockets (`ws://<broker>:4000/graphql` with `graphql-ws` subprotocol).
+All HMIs communicate directly with the broker's GraphQL endpoint (`/graphql`) over HTTP (`POST /graphql`) and WebSockets (`ws://<broker>:4000/graphql` with **`graphql-transport-ws`** subprotocol).
+
+> [!IMPORTANT]
+> **WebSocket Protocol Standard (`graphql-transport-ws`)**:
+> Always use the modern standard **`graphql-transport-ws`** subprotocol (`new WebSocket(wsUrl, 'graphql-transport-ws')`). Do **NOT** use the deprecated `graphql-ws` (`subscriptions-transport-ws`) protocol:
+> - Client sends `{"type": "connection_init"}` on connect.
+> - Server replies `{"type": "connection_ack"}`.
+> - Client subscribes using `{"id": "1", "type": "subscribe", "payload": { "query": "..." }}` (do **not** use `"start"`).
+> - Live data arrives in `{"id": "1", "type": "next", "payload": { "data": { ... } }}` (do **not** use `"data"`).
+> - Handle server `{"type": "ping"}` by replying `{"type": "pong"}`.
 
 ### 2.1 Fetching Current Topic Values (`currentValue` & `currentValues`)
 ```javascript
@@ -140,42 +149,53 @@ async function publishControl(topic, payload, { qos = 0, retained = false, forma
 }
 ```
 
-### 2.4 Real-time Subscriptions (GraphQL WebSocket)
+### 2.4 Real-time Subscriptions (`graphql-transport-ws`)
 ```javascript
 function subscribeTopicUpdates(topicFilters, onUpdate) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/graphql`;
-    const socket = new WebSocket(wsUrl, 'graphql-ws');
+    
+    // Explicitly use 'graphql-transport-ws'
+    const socket = new WebSocket(wsUrl, 'graphql-transport-ws');
 
     socket.onopen = () => {
         socket.send(JSON.stringify({ type: 'connection_init' }));
     };
 
     socket.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'connection_ack') {
-            socket.send(JSON.stringify({
-                id: '1',
-                type: 'start',
-                payload: {
-                    query: `
-                        subscription LiveTelemetry($filters: [String!]!) {
-                            topicUpdates(topicFilters: $filters, format: JSON) {
-                                topic
-                                payload
-                                format
-                                timestamp
-                                qos
-                                retained
-                                clientId
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'connection_ack') {
+                // Subscribe message using type 'subscribe' (NOT 'start')
+                socket.send(JSON.stringify({
+                    id: '1',
+                    type: 'subscribe',
+                    payload: {
+                        query: `
+                            subscription LiveTelemetry($filters: [String!]!) {
+                                topicUpdates(topicFilters: $filters, format: JSON) {
+                                    topic
+                                    payload
+                                    format
+                                    timestamp
+                                    qos
+                                    retained
+                                    clientId
+                                }
                             }
-                        }
-                    `,
-                    variables: { filters: topicFilters }
-                }
-            }));
-        } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
-            onUpdate(msg.payload.data.topicUpdates);
+                        `,
+                        variables: { filters: topicFilters }
+                    }
+                }));
+            } else if (msg.type === 'next' && msg.payload && msg.payload.data) {
+                // Live telemetry arrives under type 'next' (NOT 'data')
+                onUpdate(msg.payload.data.topicUpdates);
+            } else if (msg.type === 'ping') {
+                // Heartbeat response
+                socket.send(JSON.stringify({ type: 'pong' }));
+            }
+        } catch (err) {
+            console.error('WebSocket parse error:', err);
         }
     };
 
@@ -218,6 +238,8 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #334155; }
         .title { font-size: 1.5rem; font-weight: 600; color: #38bdf8; }
         .status-badge { background: #064e3b; color: #34d399; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; }
+        .status-badge.connecting { background: #78350f; color: #fbbf24; }
+        .status-badge.disconnected { background: #7f1d1d; color: #fca5a5; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem; }
         .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; }
         .card-label { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.5rem; }
@@ -236,7 +258,7 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
 <body>
     <div class="header">
         <div class="title">Production Line A — Live Telemetry & Control</div>
-        <div class="status-badge" id="connStatus">CONNECTING...</div>
+        <div class="status-badge connecting" id="connStatus">CONNECTING</div>
     </div>
 
     <div class="grid">
@@ -350,36 +372,59 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
             }
         }
 
-        // Live Subscriptions via GraphQL WS
-        const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/graphql';
-        const ws = new WebSocket(wsUrl, 'graphql-ws');
+        // Live Subscriptions via graphql-transport-ws protocol
+        let ws = null;
+        function initWebSocket() {
+            const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws:';
+            const wsUrl = wsProtocol + location.host + '/graphql';
+            
+            // Standard graphql-transport-ws subprotocol
+            ws = new WebSocket(wsUrl, 'graphql-transport-ws');
 
-        ws.onopen = () => ws.send(JSON.stringify({ type: 'connection_init' }));
-        ws.onmessage = (e) => {
-            const msg = JSON.parse(e.data);
-            if (msg.type === 'connection_ack') {
-                document.getElementById('connStatus').textContent = 'CONNECTED';
-                document.getElementById('connStatus').style.background = '#064e3b';
-                document.getElementById('connStatus').style.color = '#34d399';
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'connection_init' }));
+            };
 
-                ws.send(JSON.stringify({
-                    id: '1',
-                    type: 'start',
-                    payload: {
-                        query: `subscription { topicUpdates(topicFilters: ["factory/line1/#"], format: JSON) { topic payload timestamp retained } }`
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.type === 'connection_ack') {
+                        const statusBadge = document.getElementById('connStatus');
+                        statusBadge.textContent = 'CONNECTED';
+                        statusBadge.className = 'status-badge';
+
+                        // Subscribe using type 'subscribe'
+                        ws.send(JSON.stringify({
+                            id: '1',
+                            type: 'subscribe',
+                            payload: {
+                                query: `subscription { topicUpdates(topicFilters: ["factory/line1/#"], format: JSON) { topic payload timestamp retained } }`
+                            }
+                        }));
+                    } else if (msg.type === 'next' && msg.payload && msg.payload.data) {
+                        // Data arrives with type 'next'
+                        const update = msg.payload.data.topicUpdates;
+                        handleTopicUpdate(update.topic, update.payload, update.timestamp);
+                    } else if (msg.type === 'ping') {
+                        ws.send(JSON.stringify({ type: 'pong' }));
                     }
-                }));
-            } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
-                const update = msg.payload.data.topicUpdates;
-                handleTopicUpdate(update.topic, update.payload, update.timestamp);
-            }
-        };
+                } catch (err) { console.error('WS parse error', err); }
+            };
 
-        ws.onclose = () => {
-            document.getElementById('connStatus').textContent = 'DISCONNECTED';
-            document.getElementById('connStatus').style.background = '#7f1d1d';
-            document.getElementById('connStatus').style.color = '#fca5a5';
-        };
+            ws.onclose = () => {
+                const statusBadge = document.getElementById('connStatus');
+                statusBadge.textContent = 'DISCONNECTED';
+                statusBadge.className = 'status-badge disconnected';
+                // Auto reconnect after 3 seconds
+                setTimeout(initWebSocket, 3000);
+            };
+
+            ws.onerror = () => {
+                const statusBadge = document.getElementById('connStatus');
+                statusBadge.textContent = 'ERROR';
+                statusBadge.className = 'status-badge disconnected';
+            };
+        }
 
         function handleTopicUpdate(topic, payloadStr, timestamp) {
             try {
@@ -406,6 +451,9 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
                 }
             } catch (err) { console.error('Payload parse error', err); }
         }
+
+        // Start WebSocket
+        initWebSocket();
     </script>
 </body>
 </html>

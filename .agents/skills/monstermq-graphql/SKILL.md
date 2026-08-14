@@ -15,10 +15,18 @@ This skill provides complete schemas, query patterns, and JavaScript code exampl
 MonsterMQ exposes a unified GraphQL endpoint for both HTTP queries/mutations and WebSocket real-time subscriptions.
 
 - **HTTP Endpoint (Queries & Mutations)**: `POST http://<broker-host>:<port>/graphql`
-- **WebSocket Endpoint (Subscriptions)**: `ws://<broker-host>:<port>/graphql` (Protocol: `graphql-ws`)
+- **WebSocket Endpoint (Subscriptions)**: `ws://<broker-host>:<port>/graphql` (Subprotocol: `graphql-transport-ws`)
 - **Headers**: 
   - `Content-Type: application/json`
   - `Authorization: Bearer <jwt-token>` (if authentication is enabled)
+
+> [!IMPORTANT]
+> **WebSocket Protocol Requirement**:
+> MonsterMQ uses the modern **`graphql-transport-ws`** subprotocol. Do **NOT** use the legacy, deprecated `graphql-ws` (`subscriptions-transport-ws`) protocol.
+> - Subprotocol string: `'graphql-transport-ws'`
+> - Subscribe message: `type: "subscribe"` (do **not** use `"start"`)
+> - Inbound data message: `type: "next"` (do **not** use `"data"`)
+> - Heartbeat messages: handle `type: "ping"` by responding with `type: "pong"`
 
 ### Core Payload Formats (`DataFormat` Enum)
 Many queries, mutations, and subscriptions accept an optional `format: DataFormat = JSON` argument:
@@ -368,9 +376,17 @@ query QueryAggregated(
 
 ## 6. Real-Time WebSocket Subscriptions (`Subscription`)
 
-Stream live topic updates to dashboards using standard `graphql-ws` WebSockets.
+Stream live topic updates to dashboards using the **`graphql-transport-ws`** protocol.
 
-### 6.1 Subscribe to Topic Updates (`topicUpdates`)
+### 6.1 Protocol Lifecycle Overview
+1. **Connect**: Connect to `ws://<host>:<port>/graphql` requesting subprotocol `'graphql-transport-ws'`.
+2. **Init**: Client sends `{"type": "connection_init", "payload": { ... }}`.
+3. **Ack**: Server replies `{"type": "connection_ack"}`.
+4. **Subscribe**: Client sends `{"id": "1", "type": "subscribe", "payload": { "query": "...", "variables": { ... } }}`.
+5. **Streaming**: Server sends frames as `{"id": "1", "type": "next", "payload": { "data": { ... } } }`.
+6. **Keepalive**: Handle `{"type": "ping"}` by returning `{"type": "pong"}`.
+
+### 6.2 Subscribe to Topic Updates (`topicUpdates`)
 ```graphql
 subscription OnTopicUpdate($filters: [String!]!, $format: DataFormat = JSON) {
   topicUpdates(topicFilters: $filters, format: $format) {
@@ -385,7 +401,7 @@ subscription OnTopicUpdate($filters: [String!]!, $format: DataFormat = JSON) {
 }
 ```
 
-### 6.2 Bulk Topic Updates (`topicUpdatesBulk`)
+### 6.3 Bulk Topic Updates (`topicUpdatesBulk`)
 Batch real-time updates for high-frequency topics into single WebSocket frames.
 
 ```graphql
@@ -471,44 +487,62 @@ async function fetchCurrentValue(topic, archiveGroup = "Default") {
 }
 ```
 
-### 7.2 WebSocket Subscription Manager
+### 7.2 WebSocket Subscription Manager (`graphql-transport-ws`)
 ```javascript
-function subscribeToBrokerTopics(topicFilters, onMessageCallback, { format = 'JSON' } = {}) {
+function subscribeToBrokerTopics(topicFilters, onMessageCallback, { format = 'JSON', token = null } = {}) {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${location.host}/graphql`;
-  const socket = new WebSocket(wsUrl, 'graphql-ws');
+  
+  // Explicitly specify 'graphql-transport-ws' subprotocol
+  const socket = new WebSocket(wsUrl, 'graphql-transport-ws');
 
   socket.onopen = () => {
-    socket.send(JSON.stringify({ type: 'connection_init' }));
+    const initPayload = token ? { authorization: `Bearer ${token}` } : {};
+    socket.send(JSON.stringify({ type: 'connection_init', payload: initPayload }));
   };
 
   socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+    try {
+      const msg = JSON.parse(event.data);
 
-    if (msg.type === 'connection_ack') {
-      socket.send(JSON.stringify({
-        id: 'sub-1',
-        type: 'start',
-        payload: {
-          query: `
-            subscription LiveData($filters: [String!]!, $format: DataFormat) {
-              topicUpdates(topicFilters: $filters, format: $format) {
-                topic
-                payload
-                format
-                timestamp
-                qos
-                retained
-                clientId
+      if (msg.type === 'connection_ack') {
+        // Send subscribe message with type 'subscribe' (NOT 'start')
+        socket.send(JSON.stringify({
+          id: 'sub-1',
+          type: 'subscribe',
+          payload: {
+            query: `
+              subscription LiveData($filters: [String!]!, $format: DataFormat) {
+                topicUpdates(topicFilters: $filters, format: $format) {
+                  topic
+                  payload
+                  format
+                  timestamp
+                  qos
+                  retained
+                  clientId
+                }
               }
-            }
-          `,
-          variables: { filters: topicFilters, format }
-        }
-      }));
-    } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
-      onMessageCallback(msg.payload.data.topicUpdates);
+            `,
+            variables: { filters: topicFilters, format }
+          }
+        }));
+      } else if (msg.type === 'next' && msg.payload && msg.payload.data) {
+        // Inbound data frame arrives under type 'next' (NOT 'data')
+        onMessageCallback(msg.payload.data.topicUpdates);
+      } else if (msg.type === 'ping') {
+        // Respond to heartbeat ping
+        socket.send(JSON.stringify({ type: 'pong' }));
+      } else if (msg.type === 'error') {
+        console.error('Subscription error:', msg.payload);
+      }
+    } catch (err) {
+      console.error('WebSocket parse error:', err);
     }
+  };
+
+  socket.onerror = (err) => {
+    console.error('WebSocket connection error:', err);
   };
 
   return socket;

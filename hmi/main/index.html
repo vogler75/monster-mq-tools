@@ -701,6 +701,32 @@
             }
         }
 
+        async function fetchInitialValues() {
+            try {
+                const res = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `query {
+                            currentValues(topicFilter: "telemetry/#") {
+                                topic
+                                payload
+                                timestamp
+                            }
+                        }`
+                    })
+                });
+                const data = await res.json();
+                if (data.data && Array.isArray(data.data.currentValues)) {
+                    data.data.currentValues.forEach(item => {
+                        handleTopicMessage(item.topic, item.payload, item.timestamp);
+                    });
+                }
+            } catch (err) {
+                console.warn('Unable to fetch initial telemetry values:', err.message);
+            }
+        }
+
         async function fetchArchivedMessages() {
             try {
                 const res = await fetch('/graphql', {
@@ -773,7 +799,7 @@
                                 topic: topic,
                                 payload: typeof payloadObj === 'object' ? JSON.stringify(payloadObj) : String(payloadObj),
                                 qos: 1,
-                                retain: false
+                                retained: false
                             }
                         }
                     })
@@ -812,7 +838,7 @@
                         }
                     }`,
                     variables: {
-                        input: { topic, payload: payloadRaw, qos, retain }
+                        input: { topic, payload: payloadRaw, qos, retained: retain }
                     }
                 })
             })
@@ -839,7 +865,7 @@
             const wsUrl = wsProtocol + location.host + '/graphql';
 
             try {
-                ws = new WebSocket(wsUrl, 'graphql-ws');
+                ws = new WebSocket(wsUrl, 'graphql-transport-ws');
             } catch(e) {
                 updateWsStatus(false, 'CONNECTION FAILED');
                 return;
@@ -854,10 +880,10 @@
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'connection_ack') {
                         updateWsStatus(true, 'LIVE CONNECTED');
-                        // Subscribe to telemetry and controls updates
+                        // Subscribe to telemetry and controls updates using graphql-transport-ws protocol
                         ws.send(JSON.stringify({
                             id: '1',
-                            type: 'start',
+                            type: 'subscribe',
                             payload: {
                                 query: `subscription {
                                     topicUpdates(topicFilters: ["telemetry/#", "controls/#"]) {
@@ -868,9 +894,13 @@
                                 }`
                             }
                         }));
-                    } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
+                    } else if (msg.type === 'next' && msg.payload && msg.payload.data) {
                         const update = msg.payload.data.topicUpdates;
                         handleTopicMessage(update.topic, update.payload, update.timestamp);
+                    } else if (msg.type === 'ping') {
+                        ws.send(JSON.stringify({ type: 'pong' }));
+                    } else if (msg.type === 'error') {
+                        console.error('GraphQL subscription error:', msg.payload);
                     }
                 } catch (e) {
                     console.error('WS Parse Error:', e);
@@ -1001,6 +1031,7 @@
         window.addEventListener('DOMContentLoaded', () => {
             initChart();
             fetchBrokerInfo();
+            fetchInitialValues();
             initWebSocket();
         });
     </script>
