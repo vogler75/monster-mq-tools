@@ -2,26 +2,135 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
-func runGetValue(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli get-value <topic> [--archive-group Default]")
+// formatPayload decodes base64 string payloads into readable UTF-8 text when valid.
+func formatPayload(payload string) string {
+	if payload == "" {
+		return ""
 	}
-	topic := args[0]
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err == nil && len(decoded) > 0 {
+		if utf8.Valid(decoded) && isPrintable(string(decoded)) {
+			return string(decoded)
+		}
+	}
+	return payload
+}
+
+func isPrintable(s string) bool {
+	for _, r := range s {
+		if r < 32 && r != '\t' && r != '\n' && r != '\r' {
+			return false
+		}
+	}
+	return true
+}
+
+// formatTimestampISO formats epoch timestamps (seconds, millis, micros, nanos) as ISO 8601 UTC.
+func formatTimestampISO(ts int64) string {
+	if ts <= 0 {
+		return ""
+	}
+	var t time.Time
+	if ts > 1e18 { // nanoseconds
+		t = time.Unix(0, ts).UTC()
+	} else if ts > 1e15 { // microseconds
+		t = time.UnixMicro(ts).UTC()
+	} else if ts > 1e11 { // milliseconds (e.g. 1786683732069)
+		t = time.UnixMilli(ts).UTC()
+	} else { // seconds
+		t = time.Unix(ts, 0).UTC()
+	}
+	return t.Format(time.RFC3339)
+}
+
+// formatPayloadAndType decodes base64 string payloads and infers if it is text/JSON.
+func formatPayloadAndType(payload string, origFormat string) (string, string) {
+	if payload == "" {
+		return "", origFormat
+	}
+	decoded, err := base64.StdEncoding.DecodeString(payload)
+	if err == nil && len(decoded) > 0 {
+		if utf8.Valid(decoded) && isPrintable(string(decoded)) {
+			detectedType := "STRING"
+			trimmed := strings.TrimSpace(string(decoded))
+			if (strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}")) ||
+				(strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]")) {
+				var js json.RawMessage
+				if json.Unmarshal([]byte(trimmed), &js) == nil {
+					detectedType = "JSON"
+				}
+			}
+			return string(decoded), detectedType
+		}
+	}
+	return payload, origFormat
+}
+
+func hasHelpFlag(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "help" {
+			return true
+		}
+	}
+	return false
+}
+
+func runGetValue(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq currentValue <topic> [archiveGroup] [options]")
+		fmt.Println()
+		fmt.Println("Fetch current or retained payload and metadata for a specific topic.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <topic>             Topic name (required)")
+		fmt.Println("  [archiveGroup]      Archive group name (default: Default)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --archive-group, -g Archive group name (alternative to positional argument)")
+		fmt.Println("  -h, --help          Show this help text")
+		return nil
+	}
+
+	var topic string
 	archiveGroup := "Default"
 
-	for i := 1; i < len(args); i++ {
-		if args[i] == "--archive-group" && i+1 < len(args) {
-			archiveGroup = args[i+1]
-			i++
+	var nonFlagArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			switch arg {
+			case "--archive-group", "--group", "-g":
+				if i+1 < len(args) {
+					archiveGroup = args[i+1]
+					i++
+				}
+			}
+		} else {
+			nonFlagArgs = append(nonFlagArgs, arg)
 		}
+	}
+
+	if len(nonFlagArgs) > 0 {
+		topic = nonFlagArgs[0]
+	}
+	if len(nonFlagArgs) > 1 {
+		archiveGroup = nonFlagArgs[1]
+	}
+
+	if topic == "" {
+		fmt.Println("Usage: mmq currentValue <topic> [archiveGroup] [options]")
+		return nil
 	}
 
 	query := `
@@ -87,17 +196,37 @@ func runGetValue(ctx context.Context, client *Client, args []string) error {
 		return nil
 	}
 
+	isoTime := formatTimestampISO(val.Timestamp)
+	timeStr := strconv.FormatInt(val.Timestamp, 10)
+	if isoTime != "" {
+		timeStr = isoTime
+	}
+
+	payloadStr, formatStr := formatPayloadAndType(val.Payload, val.Format)
+
 	fmt.Printf("Topic:     %s\n", val.Topic)
-	fmt.Printf("Payload:   %s\n", val.Payload)
-	fmt.Printf("Format:    %s\n", val.Format)
-	fmt.Printf("Timestamp: %d\n", val.Timestamp)
+	fmt.Printf("Payload:   %s\n", payloadStr)
+	fmt.Printf("Format:    %s\n", formatStr)
+	fmt.Printf("Timestamp: %s\n", timeStr)
 	fmt.Printf("QoS:       %d\n", val.QoS)
 	return nil
 }
 
 func runSetValue(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: mmqcli set-value <topic> <payload> [--retain] [--qos 0|1|2]")
+	if len(args) < 2 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq publish <topic> <payload> [options]")
+		fmt.Println()
+		fmt.Println("Publish a message payload to a topic.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <topic>             Topic name (required)")
+		fmt.Println("  <payload>           Message payload string or JSON (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --retain, -r        Publish as retained message (default: false)")
+		fmt.Println("  --qos 0|1|2         MQTT QoS level (default: 0)")
+		fmt.Println("  -h, --help          Show this help text")
+		return nil
 	}
 	topic := args[0]
 	payload := args[1]
@@ -163,6 +292,21 @@ func runSetValue(ctx context.Context, client *Client, args []string) error {
 }
 
 func runListTopics(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq searchTopics [pattern] [options]")
+		fmt.Println()
+		fmt.Println("Search active topics across database archives and live retained store.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  [pattern]           Glob (*), SQL LIKE (%), or MQTT (#) wildcard (default: #)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --limit N, -l N     Maximum topics to return (default: 100)")
+		fmt.Println("  --archive-group, -g Archive group name (default: Default)")
+		fmt.Println("  -h, --help          Show this help text")
+		return nil
+	}
+
 	pattern := "#"
 	limit := 100
 	archiveGroup := "Default"
@@ -289,6 +433,15 @@ func isTopicMatch(topic, pattern, searchTerm string) bool {
 }
 
 func runListArchives(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq archiveGroups [options]")
+		fmt.Println()
+		fmt.Println("List all deployed archive groups and their storage configurations.")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help          Show this help text")
+		return nil
+	}
 	query := `
 		query ListArchives {
 			archiveGroups {
@@ -341,8 +494,20 @@ func runListArchives(ctx context.Context, client *Client, args []string) error {
 }
 
 func runArchiveStats(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli archive-stats <group> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq archiveStats <group> [options]")
+		fmt.Println()
+		fmt.Println("Display min timestamps and daily message counts for an archive group.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <group>                  Archive group name (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --start ISO_TIME         Start time in ISO 8601 UTC")
+		fmt.Println("  --end ISO_TIME           End time in ISO 8601 UTC")
+		fmt.Println("  --last-seconds N, -s N   Query stats for the last N seconds")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
 	}
 	group := args[0]
 	var startTime, endTime string
@@ -433,46 +598,89 @@ func runArchiveStats(ctx context.Context, client *Client, args []string) error {
 }
 
 func runQueryHistory(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli query-history <topic> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N] [--limit N] [--archive-group Default]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq archivedMessages <topic> [archiveGroup] [options]")
+		fmt.Println()
+		fmt.Println("Query historical messages for a topic from an archive group.")
+		fmt.Println("By default, queries the last 60 seconds (1 minute) from the 'Default' archive group.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <topic>                  Topic name or MQTT filter (required)")
+		fmt.Println("  [archiveGroup]           Archive group name (default: Default)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --start ISO_TIME         Start time in ISO 8601 UTC (e.g. 2026-08-14T00:00:00Z)")
+		fmt.Println("  --end ISO_TIME           End time in ISO 8601 UTC")
+		fmt.Println("  --last-seconds N, -s N   Query messages from the last N seconds (default: 60)")
+		fmt.Println("  --limit N, -l N          Maximum messages to retrieve (default: 100)")
+		fmt.Println("  --archive-group, -g      Archive group name (alternative to positional argument)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
 	}
-	topic := args[0]
+
+	var topic string
 	archiveGroup := "Default"
 	limit := 100
 	var startTime, endTime string
 
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
-		case "--start":
-			if i+1 < len(args) {
-				startTime = args[i+1]
-				i++
+	var nonFlagArgs []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "-") {
+			switch arg {
+			case "--start":
+				if i+1 < len(args) {
+					startTime = args[i+1]
+					i++
+				}
+			case "--end":
+				if i+1 < len(args) {
+					endTime = args[i+1]
+					i++
+				}
+			case "--last-seconds", "-s":
+				if i+1 < len(args) {
+					sec, _ := strconv.Atoi(args[i+1])
+					now := time.Now().UTC()
+					start := now.Add(-time.Duration(sec) * time.Second)
+					startTime = start.Format(time.RFC3339)
+					endTime = now.Format(time.RFC3339)
+					i++
+				}
+			case "--limit", "-l":
+				if i+1 < len(args) {
+					limit, _ = strconv.Atoi(args[i+1])
+					i++
+				}
+			case "--archive-group", "--group", "-g":
+				if i+1 < len(args) {
+					archiveGroup = args[i+1]
+					i++
+				}
 			}
-		case "--end":
-			if i+1 < len(args) {
-				endTime = args[i+1]
-				i++
-			}
-		case "--last-seconds":
-			if i+1 < len(args) {
-				sec, _ := strconv.Atoi(args[i+1])
-				now := time.Now().UTC()
-				start := now.Add(-time.Duration(sec) * time.Second)
-				startTime = start.Format(time.RFC3339)
-				endTime = now.Format(time.RFC3339)
-				i++
-			}
-		case "--limit":
-			if i+1 < len(args) {
-				limit, _ = strconv.Atoi(args[i+1])
-				i++
-			}
-		case "--archive-group":
-			if i+1 < len(args) {
-				archiveGroup = args[i+1]
-				i++
-			}
+		} else {
+			nonFlagArgs = append(nonFlagArgs, arg)
 		}
+	}
+
+	if len(nonFlagArgs) > 0 {
+		topic = nonFlagArgs[0]
+	}
+	if len(nonFlagArgs) > 1 {
+		archiveGroup = nonFlagArgs[1]
+	}
+
+	if topic == "" {
+		fmt.Println("Usage: mmq archivedMessages <topic> [archiveGroup] [options]")
+		return nil
+	}
+
+	// Default to last 60 seconds if no timerange or last-seconds is specified
+	if startTime == "" && endTime == "" {
+		now := time.Now().UTC()
+		start := now.Add(-60 * time.Second)
+		startTime = start.Format(time.RFC3339)
+		endTime = now.Format(time.RFC3339)
 	}
 
 	query := `
@@ -528,16 +736,36 @@ func runQueryHistory(ctx context.Context, client *Client, args []string) error {
 
 	fmt.Printf("Retrieved %d historical messages:\n", len(res.Data.ArchivedMessages))
 	for _, m := range res.Data.ArchivedMessages {
-		fmt.Printf(" [%d] %s: %s\n", m.Timestamp, m.Topic, m.Payload)
+		isoTime := formatTimestampISO(m.Timestamp)
+		timeStr := strconv.FormatInt(m.Timestamp, 10)
+		if isoTime != "" {
+			timeStr = isoTime
+		}
+		fmt.Printf(" [%s] %s: %s\n", timeStr, m.Topic, formatPayload(m.Payload))
 	}
 	return nil
 }
 
 func runQueryAggregated(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli query-aggregated <topics...> [--interval ONE_MINUTE|FIVE_MINUTES|FIFTEEN_MINUTES|ONE_HOUR|ONE_DAY] [--functions AVG,MIN,MAX,COUNT] [--fields name1,name2] [--last-seconds N] [--archive-group Default]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq aggregatedMessages <topic1> [topic2...] [options]")
+		fmt.Println()
+		fmt.Println("Query aggregated time-series metrics (AVG, MIN, MAX, COUNT) across topics.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <topics...>              One or more topic names (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --interval INTERVAL      Time bucket: ONE_MINUTE, FIVE_MINUTES, FIFTEEN_MINUTES, ONE_HOUR, ONE_DAY (default: ONE_MINUTE)")
+		fmt.Println("  --functions FN1,FN2      Aggregate functions: AVG, MIN, MAX, COUNT (default: AVG)")
+		fmt.Println("  --fields FIELD1,FIELD2   JSON fields to aggregate")
+		fmt.Println("  --start ISO_TIME         Start time in ISO 8601 UTC")
+		fmt.Println("  --end ISO_TIME           End time in ISO 8601 UTC")
+		fmt.Println("  --last-seconds N, -s N   Time window in seconds")
+		fmt.Println("  --archive-group, -g      Archive group name (default: Default)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
 	}
-
 	var topics []string
 	interval := "ONE_MINUTE"
 	functions := []string{"AVG"}
@@ -672,6 +900,31 @@ func runQueryAggregated(ctx context.Context, client *Client, args []string) erro
 }
 
 func runDeviceList(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq device list [type] [options]")
+		fmt.Println()
+		fmt.Println("List all configured devices and edge nodes.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  [type]                   Filter devices by type (e.g. OPCUA_CLIENT, MQTT_CLIENT, KAFKA_CLIENT)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --type <type>, -t <type> Filter devices by type")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
+
+	filterType := ""
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if (arg == "--type" || arg == "-t") && i+1 < len(args) {
+			filterType = args[i+1]
+			i++
+		} else if !strings.HasPrefix(arg, "-") && filterType == "" {
+			filterType = arg
+		}
+	}
+
 	query := `
 		query ListDevices {
 			getDevices {
@@ -709,19 +962,54 @@ func runDeviceList(ctx context.Context, client *Client, args []string) error {
 		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
 	}
 
+	devices := res.Data.GetDevices
+	if filterType != "" {
+		filtered := make([]struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+			NodeID    string `json:"nodeId"`
+			Type      string `json:"type"`
+			Enabled   bool   `json:"enabled"`
+			CreatedAt string `json:"createdAt"`
+			UpdatedAt string `json:"updatedAt"`
+		}, 0)
+		ft := strings.ToLower(filterType)
+		for _, d := range devices {
+			if strings.Contains(strings.ToLower(d.Type), ft) {
+				filtered = append(filtered, d)
+			}
+		}
+		devices = filtered
+	}
+
 	if client.cfg.JSONMode {
-		return printJSON(res.Data.GetDevices)
+		return printJSON(devices)
+	}
+
+	if len(devices) == 0 {
+		if filterType != "" {
+			fmt.Printf("No devices found matching type '%s'\n", filterType)
+		} else {
+			fmt.Println("No devices found")
+		}
+		return nil
 	}
 
 	fmt.Printf("%-20s %-15s %-15s %-15s %-10s %-20s\n", "NAME", "NAMESPACE", "NODE_ID", "TYPE", "ENABLED", "UPDATED_AT")
 	fmt.Println(strings.Repeat("-", 98))
-	for _, d := range res.Data.GetDevices {
+	for _, d := range devices {
 		fmt.Printf("%-20s %-15s %-15s %-15s %-10t %-20s\n", d.Name, d.Namespace, d.NodeID, d.Type, d.Enabled, d.UpdatedAt)
 	}
 	return nil
 }
 
 func runDeviceDownload(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq device download [device-name] [output-file.json]")
+		fmt.Println()
+		fmt.Println("Export device JSON configurations to standard output or a file.")
+		return nil
+	}
 	name := ""
 	outFile := ""
 	if len(args) > 0 {
@@ -793,8 +1081,11 @@ func runDeviceDownload(ctx context.Context, client *Client, args []string) error
 }
 
 func runDeviceUpload(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli device upload <file.json>")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq device upload <file.json>")
+		fmt.Println()
+		fmt.Println("Import or bulk update device configurations from a JSON file.")
+		return nil
 	}
 	inFile := args[0]
 
@@ -877,8 +1168,10 @@ func setDeviceEnabled(ctx context.Context, client *Client, args []string, enable
 	if !enabled {
 		actionStr = "disable"
 	}
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli device %s <name>", actionStr)
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Printf("Usage: mmq device %s <name>\n\n", actionStr)
+		fmt.Printf("%s a configured device or edge MQTT client dynamically.\n", strings.Title(actionStr))
+		return nil
 	}
 	name := args[0]
 
@@ -1005,6 +1298,15 @@ func setDeviceEnabled(ctx context.Context, client *Client, args []string, enable
 }
 
 func runListFeatures(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq features [options]")
+		fmt.Println()
+		fmt.Println("Query the connected broker instance to list active feature flags.")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help          Show this help text")
+		return nil
+	}
 	query := `
 		query {
 			broker {
@@ -1057,8 +1359,19 @@ func printJSON(v any) error {
 }
 
 func runGetValues(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli get-values <topic-filter> [--limit N] [--archive-group Default]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq currentValues <topic-filter> [options]")
+		fmt.Println()
+		fmt.Println("Fetch current values for all topics matching an MQTT topic filter.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <topic-filter>           MQTT topic filter e.g. sensors/# (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --limit N, -l N          Maximum topics to return (default: 100)")
+		fmt.Println("  --archive-group, -g      Archive group name (default: Default)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
 	}
 	filter := args[0]
 	limit := 100
@@ -1122,14 +1435,32 @@ func runGetValues(ctx context.Context, client *Client, args []string) error {
 
 	fmt.Printf("Found %d values matching '%s':\n", len(res.Data.CurrentValues), filter)
 	for _, val := range res.Data.CurrentValues {
+		isoTime := formatTimestampISO(val.Timestamp)
+		timeStr := strconv.FormatInt(val.Timestamp, 10)
+		if isoTime != "" {
+			timeStr = isoTime
+		}
 		fmt.Printf(" - Topic:     %s\n", val.Topic)
-		fmt.Printf("   Payload:   %s\n", val.Payload)
-		fmt.Printf("   Timestamp: %d\n", val.Timestamp)
+		fmt.Printf("   Payload:   %s\n", formatPayload(val.Payload))
+		fmt.Printf("   Timestamp: %s\n", timeStr)
 	}
 	return nil
 }
 
 func runListRetained(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq retainedMessages [topic-filter] [options]")
+		fmt.Println()
+		fmt.Println("List all retained messages matching an MQTT topic filter.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  [topic-filter]           MQTT topic filter (default: #)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --limit N, -l N          Maximum messages to return (default: 100)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
 	filter := "#"
 	limit := 100
 
@@ -1186,14 +1517,32 @@ func runListRetained(ctx context.Context, client *Client, args []string) error {
 
 	fmt.Printf("Found %d retained messages matching '%s':\n", len(res.Data.RetainedMessages), filter)
 	for _, rm := range res.Data.RetainedMessages {
+		isoTime := formatTimestampISO(rm.Timestamp)
+		timeStr := strconv.FormatInt(rm.Timestamp, 10)
+		if isoTime != "" {
+			timeStr = isoTime
+		}
 		fmt.Printf(" - Topic:     %s\n", rm.Topic)
-		fmt.Printf("   Payload:   %s\n", rm.Payload)
-		fmt.Printf("   Timestamp: %d\n", rm.Timestamp)
+		fmt.Printf("   Payload:   %s\n", formatPayload(rm.Payload))
+		fmt.Printf("   Timestamp: %s\n", timeStr)
 	}
 	return nil
 }
 
 func runBrowseTopics(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq browseTopics [path] [options]")
+		fmt.Println()
+		fmt.Println("Hierarchically browse topic levels.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  [path]                   Topic path prefix (default: +)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --archive-group, -g      Archive group name (default: Default)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
 	topic := "+"
 	archiveGroup := "Default"
 
@@ -1263,7 +1612,7 @@ func runBrowseTopics(ctx context.Context, client *Client, args []string) error {
 	for _, t := range res.Data.BrowseTopics {
 		valStr := ""
 		if t.Value != nil && t.Value.Payload != "" {
-			valStr = fmt.Sprintf(" = %s", t.Value.Payload)
+			valStr = fmt.Sprintf(" = %s", formatPayload(t.Value.Payload))
 		}
 		fmt.Printf(" - %s%s\n", t.Name, valStr)
 	}
@@ -1271,6 +1620,13 @@ func runBrowseTopics(ctx context.Context, client *Client, args []string) error {
 }
 
 func runSessionList(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq sessions")
+		fmt.Println("       mmq session list")
+		fmt.Println()
+		fmt.Println("List all active MQTT client sessions.")
+		return nil
+	}
 	query := `
 		query ListSessions {
 			sessions {
@@ -1321,8 +1677,18 @@ func runSessionList(ctx context.Context, client *Client, args []string) error {
 }
 
 func runSessionInspect(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli session inspect <clientId>")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq session <clientId>")
+		fmt.Println("       mmq session inspect <clientId>")
+		fmt.Println()
+		fmt.Println("Inspect active MQTT client session and subscriptions.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <clientId>   Client identifier to inspect (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help   Show this help text")
+		return nil
 	}
 	clientId := args[0]
 
@@ -1395,8 +1761,11 @@ func runSessionInspect(ctx context.Context, client *Client, args []string) error
 }
 
 func runSessionRemove(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli session remove <clientId1> [clientId2...]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq session remove <clientId1> [clientId2...]")
+		fmt.Println()
+		fmt.Println("Terminate and remove one or more client sessions.")
+		return nil
 	}
 
 	query := `
@@ -1449,6 +1818,17 @@ func runSessionRemove(ctx context.Context, client *Client, args []string) error 
 }
 
 func runLogs(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq systemLogs [options]")
+		fmt.Println()
+		fmt.Println("View broker system logs.")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --last-minutes N         Fetch logs from last N minutes (default: 60)")
+		fmt.Println("  --limit N                Maximum log entries (default: 50)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
 	limit := 50
 	lastMinutes := 60
 
@@ -1513,23 +1893,47 @@ func runLogs(ctx context.Context, client *Client, args []string) error {
 }
 
 func runHmiList(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq hmis")
+		fmt.Println()
+		fmt.Println("List deployed HMI web dashboards.")
+		return nil
+	}
 	query := `
 		query ListHmis {
 			hmis {
 				name
 				nodeId
-				description
-				mainDashboard
+				enabled
+				isOnCurrentNode
+				config {
+					urlPath
+					isMain
+					title
+					description
+					entryPoint
+				}
+				fileCount
+				sizeBytes
 			}
 		}
 	`
 	var res struct {
 		Data struct {
 			Hmis []struct {
-				Name          string `json:"name"`
-				NodeId        string `json:"nodeId"`
-				Description   string `json:"description"`
-				MainDashboard bool   `json:"mainDashboard"`
+				Name            string `json:"name"`
+				NodeId          string `json:"nodeId"`
+				Enabled         bool   `json:"enabled"`
+				IsOnCurrentNode bool   `json:"isOnCurrentNode"`
+				Config          struct {
+					UrlPath     string `json:"urlPath"`
+					IsMain      bool   `json:"isMain"`
+					Title       string `json:"title"`
+					Description string `json:"description"`
+					EntryPoint  string `json:"entryPoint"`
+				} `json:"config"`
+				FileCount *int   `json:"fileCount"`
+				SizeBytes *int64 `json:"sizeBytes"`
 			} `json:"hmis"`
 		} `json:"data"`
 		Errors []struct {
@@ -1553,35 +1957,275 @@ func runHmiList(ctx context.Context, client *Client, args []string) error {
 		return nil
 	}
 
-	fmt.Println("DEPLOYED HMI DASHBOARDS")
-	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("%-18s %-22s %-16s %-8s %-12s %s\n", "NAME", "TITLE", "PATH", "MAIN", "NODE", "FILES")
+	fmt.Println(strings.Repeat("-", 85))
 	for _, h := range res.Data.Hmis {
-		mainBadge := ""
-		if h.MainDashboard {
-			mainBadge = " [MAIN]"
+		title := h.Config.Title
+		if title == "" {
+			title = "-"
 		}
-		fmt.Printf(" - %s%s (Node: %s)\n", h.Name, mainBadge, h.NodeId)
-		if h.Description != "" {
-			fmt.Printf("   Description: %s\n", h.Description)
+		pathStr := h.Config.UrlPath
+		if pathStr == "" {
+			pathStr = "/" + h.Name
 		}
+		isMainStr := "no"
+		if h.Config.IsMain {
+			isMainStr = "yes"
+		}
+		fileCountStr := "-"
+		if h.FileCount != nil {
+			fileCountStr = strconv.Itoa(*h.FileCount)
+		}
+		fmt.Printf("%-18s %-22s %-16s %-8s %-12s %s\n", h.Name, title, pathStr, isMainStr, h.NodeId, fileCountStr)
 	}
 	return nil
 }
 
+func runHmiRemove(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq hmi remove <name1> [name2...]")
+		fmt.Println("       mmq hmis remove <name1> [name2...]")
+		fmt.Println()
+		fmt.Println("Delete and remove one or more deployed HMI dashboards.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <name...>   One or more HMI dashboard names to delete (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help  Show this help text")
+		return nil
+	}
+
+	query := `
+		mutation DeleteHmi($name: String!) {
+			hmi {
+				delete(name: $name) {
+					success
+					message
+				}
+			}
+		}
+	`
+
+	var results []map[string]any
+
+	for _, name := range args {
+		if strings.HasPrefix(name, "-") {
+			continue
+		}
+		var res struct {
+			Data struct {
+				Hmi struct {
+					Delete struct {
+						Success bool   `json:"success"`
+						Message string `json:"message"`
+					} `json:"delete"`
+				} `json:"hmi"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+
+		if err := client.DoQuery(ctx, query, map[string]any{"name": name}, &res); err != nil {
+			return err
+		}
+		if len(res.Errors) > 0 {
+			return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+		}
+
+		delRes := res.Data.Hmi.Delete
+		if client.cfg.JSONMode {
+			results = append(results, map[string]any{
+				"name":    name,
+				"success": delRes.Success,
+				"message": delRes.Message,
+			})
+		} else {
+			if delRes.Success {
+				fmt.Printf("✓ HMI dashboard '%s' deleted successfully\n", name)
+			} else {
+				errMsg := delRes.Message
+				if errMsg == "" {
+					errMsg = "failed to delete"
+				}
+				fmt.Printf("✗ Failed to delete HMI dashboard '%s': %s\n", name, errMsg)
+			}
+		}
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(results)
+	}
+	return nil
+}
+
+func runHmiCreate(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq hmi create <name> [options]")
+		fmt.Println()
+		fmt.Println("Create a new HMI dashboard definition.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <name>                   Unique HMI dashboard name (required)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --path <urlPath>         URL path (default: /<name>)")
+		fmt.Println("  --title <title>          Display title for the dashboard (default: <name>)")
+		fmt.Println("  --description <desc>     Description of the dashboard")
+		fmt.Println("  --entry-point <file>     HTML entrypoint filename (default: index.html)")
+		fmt.Println("  --main, -m               Designate as the primary/default dashboard (default: false)")
+		fmt.Println("  --node <nodeId>          Target cluster node ID")
+		fmt.Println("  --disabled               Create in disabled state (default: enabled)")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
+
+	name := args[0]
+	urlPath := "/" + name
+	title := name
+	desc := ""
+	entryPoint := "index.html"
+	isMain := false
+	enabled := true
+	var nodeId *string
+
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case (arg == "--path" || arg == "-p") && i+1 < len(args):
+			urlPath = args[i+1]
+			if !strings.HasPrefix(urlPath, "/") {
+				urlPath = "/" + urlPath
+			}
+			i++
+		case (arg == "--title" || arg == "-t") && i+1 < len(args):
+			title = args[i+1]
+			i++
+		case (arg == "--description" || arg == "-d") && i+1 < len(args):
+			desc = args[i+1]
+			i++
+		case arg == "--entry-point" && i+1 < len(args):
+			entryPoint = args[i+1]
+			i++
+		case arg == "--node" && i+1 < len(args):
+			n := args[i+1]
+			nodeId = &n
+			i++
+		case arg == "--main" || arg == "-m":
+			isMain = true
+		case arg == "--disabled":
+			enabled = false
+		}
+	}
+
+	input := map[string]any{
+		"name":    name,
+		"enabled": enabled,
+		"config": map[string]any{
+			"urlPath":     urlPath,
+			"isMain":      isMain,
+			"title":       title,
+			"description": desc,
+			"entryPoint":  entryPoint,
+		},
+	}
+	if nodeId != nil {
+		input["nodeId"] = *nodeId
+	}
+
+	query := `
+		mutation CreateHmi($input: HmiInput!) {
+			hmi {
+				create(input: $input) {
+					success
+					message
+					hmi {
+						name
+						nodeId
+						enabled
+						config {
+							urlPath
+							isMain
+							title
+							description
+							entryPoint
+						}
+					}
+				}
+			}
+		}
+	`
+	var res struct {
+		Data struct {
+			Hmi struct {
+				Create struct {
+					Success bool   `json:"success"`
+					Message string `json:"message"`
+					Hmi     *struct {
+						Name    string `json:"name"`
+						NodeId  string `json:"nodeId"`
+						Enabled bool   `json:"enabled"`
+						Config  struct {
+							UrlPath     string `json:"urlPath"`
+							IsMain      bool   `json:"isMain"`
+							Title       string `json:"title"`
+							Description string `json:"description"`
+							EntryPoint  string `json:"entryPoint"`
+						} `json:"config"`
+					} `json:"hmi"`
+				} `json:"create"`
+			} `json:"hmi"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, map[string]any{"input": input}, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	createRes := res.Data.Hmi.Create
+	if client.cfg.JSONMode {
+		return printJSON(createRes)
+	}
+
+	if !createRes.Success {
+		errMsg := createRes.Message
+		if errMsg == "" {
+			errMsg = "unknown error"
+		}
+		return fmt.Errorf("failed to create HMI dashboard: %s", errMsg)
+	}
+
+	fmt.Printf("✓ HMI dashboard '%s' created successfully (Path: %s, Title: %q)\n", name, urlPath, title)
+	return nil
+}
+
 func runCurrentUser(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq currentUser")
+		fmt.Println()
+		fmt.Println("Inspect authenticated user and admin privileges.")
+		return nil
+	}
 	query := `
 		query {
 			currentUser {
 				username
-				roles
+				isAdmin
 			}
 		}
 	`
 	var res struct {
 		Data struct {
 			CurrentUser *struct {
-				Username string   `json:"username"`
-				Roles    []string `json:"roles"`
+				Username string `json:"username"`
+				IsAdmin  bool   `json:"isAdmin"`
 			} `json:"currentUser"`
 		} `json:"data"`
 		Errors []struct {
@@ -1605,29 +2249,52 @@ func runCurrentUser(ctx context.Context, client *Client, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("User: %s\n", res.Data.CurrentUser.Username)
-	if len(res.Data.CurrentUser.Roles) > 0 {
-		fmt.Printf("Roles: %s\n", strings.Join(res.Data.CurrentUser.Roles, ", "))
-	}
+	fmt.Printf("User:  %s\n", res.Data.CurrentUser.Username)
+	fmt.Printf("Admin: %v\n", res.Data.CurrentUser.IsAdmin)
 	return nil
 }
 
 func runDatabaseConnections(ctx context.Context, client *Client, args []string) error {
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq databaseConnections [type]")
+		fmt.Println()
+		fmt.Println("List configured database connections (e.g. POSTGRES, MONGODB, SQLITE).")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  [type]                   Optional filter by database type (POSTGRES, MONGODB, SQLITE)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
+
+	var connType *string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		t := strings.ToUpper(args[0])
+		connType = &t
+	}
+
 	query := `
-		query {
-			databaseConnections {
+		query DatabaseConnections($type: DatabaseConnectionType) {
+			databaseConnections(type: $type) {
 				name
 				type
-				status
+				url
+				database
+				schema
+				readOnly
 			}
 		}
 	`
 	var res struct {
 		Data struct {
 			DatabaseConnections []struct {
-				Name   string `json:"name"`
-				Type   string `json:"type"`
-				Status string `json:"status"`
+				Name     string `json:"name"`
+				Type     string `json:"type"`
+				URL      string `json:"url"`
+				Database string `json:"database"`
+				Schema   string `json:"schema"`
+				ReadOnly bool   `json:"readOnly"`
 			} `json:"databaseConnections"`
 		} `json:"data"`
 		Errors []struct {
@@ -1635,7 +2302,12 @@ func runDatabaseConnections(ctx context.Context, client *Client, args []string) 
 		} `json:"errors"`
 	}
 
-	if err := client.DoQuery(ctx, query, nil, &res); err != nil {
+	vars := map[string]any{}
+	if connType != nil {
+		vars["type"] = *connType
+	}
+
+	if err := client.DoQuery(ctx, query, vars, &res); err != nil {
 		return err
 	}
 	if len(res.Errors) > 0 {
@@ -1646,19 +2318,49 @@ func runDatabaseConnections(ctx context.Context, client *Client, args []string) 
 		return printJSON(res.Data.DatabaseConnections)
 	}
 
-	fmt.Printf("%-24s %-16s %s\n", "NAME", "TYPE", "STATUS")
-	fmt.Println(strings.Repeat("-", 50))
+	if len(res.Data.DatabaseConnections) == 0 {
+		fmt.Println("No database connections found")
+		return nil
+	}
+
+	fmt.Printf("%-24s %-12s %-10s %-20s %s\n", "NAME", "TYPE", "READONLY", "DATABASE", "URL")
+	fmt.Println(strings.Repeat("-", 80))
 	for _, db := range res.Data.DatabaseConnections {
-		fmt.Printf("%-24s %-16s %s\n", db.Name, db.Type, db.Status)
+		dbName := db.Database
+		if dbName == "" {
+			dbName = "-"
+		}
+		fmt.Printf("%-24s %-12s %-10t %-20s %s\n", db.Name, db.Type, db.ReadOnly, dbName, db.URL)
 	}
 	return nil
 }
 
 func runExportHmiZip(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: mmqcli hmi export <dashboard-name>")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq exportHmiZip <dashboard-name> [output-file.zip]")
+		fmt.Println()
+		fmt.Println("Export a deployed HMI dashboard as a binary zip file.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <dashboard-name>         Name of the deployed HMI dashboard (required)")
+		fmt.Println("  [output-file.zip]        Output zip file path (default: <dashboard-name>.zip)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
 	}
+
 	name := args[0]
+	outFile := ""
+	if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+		outFile = args[1]
+	}
+	if outFile == "" {
+		outFile = name
+		if !strings.HasSuffix(strings.ToLower(outFile), ".zip") {
+			outFile += ".zip"
+		}
+	}
 
 	query := `
 		query ExportHmiZip($name: String!) {
@@ -1681,10 +2383,177 @@ func runExportHmiZip(ctx context.Context, client *Client, args []string) error {
 		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
 	}
 
-	if client.cfg.JSONMode {
-		return printJSON(res.Data)
+	rawB64 := res.Data.ExportHmiZip
+	if rawB64 == "" {
+		return fmt.Errorf("empty export data returned for HMI '%s'", name)
 	}
 
-	fmt.Printf("HMI Zip Export string: %s\n", res.Data.ExportHmiZip)
+	zipBytes, err := base64.StdEncoding.DecodeString(rawB64)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 zip data: %w", err)
+	}
+
+	if err := os.WriteFile(outFile, zipBytes, 0644); err != nil {
+		return fmt.Errorf("error writing zip file '%s': %w", outFile, err)
+	}
+
+	if client.cfg.JSONMode {
+		return printJSON(map[string]any{
+			"name":      name,
+			"file":      outFile,
+			"sizeBytes": len(zipBytes),
+			"success":   true,
+		})
+	}
+
+	fmt.Printf("✓ Exported HMI dashboard '%s' to '%s' (%d bytes)\n", name, outFile, len(zipBytes))
 	return nil
 }
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq importHmiZip <file.zip> [dashboard-name] [options]")
+		fmt.Println("       mmq importHmiZip <dashboard-name> <file.zip> [options]")
+		fmt.Println()
+		fmt.Println("Upload and deploy an HMI web dashboard from a binary zip file.")
+		fmt.Println()
+		fmt.Println("Arguments:")
+		fmt.Println("  <file.zip>               Path to the local .zip file package (required)")
+		fmt.Println("  [dashboard-name]         Name for the HMI dashboard (defaults to zip filename)")
+		fmt.Println()
+		fmt.Println("Options:")
+		fmt.Println("  --main, -m               Set this dashboard as the primary / default HMI")
+		fmt.Println("  -h, --help               Show this help text")
+		return nil
+	}
+
+	var fileArg, nameArg string
+	var setAsMain *bool
+
+	posArgs := []string{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--main" || arg == "-m" {
+			v := true
+			setAsMain = &v
+		} else if !strings.HasPrefix(arg, "-") {
+			posArgs = append(posArgs, arg)
+		}
+	}
+
+	if len(posArgs) < 1 {
+		return fmt.Errorf("missing zip file or dashboard name")
+	}
+
+	if strings.HasSuffix(strings.ToLower(posArgs[0]), ".zip") || fileExists(posArgs[0]) {
+		fileArg = posArgs[0]
+		if len(posArgs) > 1 {
+			nameArg = posArgs[1]
+		}
+	} else if len(posArgs) > 1 && (strings.HasSuffix(strings.ToLower(posArgs[1]), ".zip") || fileExists(posArgs[1])) {
+		nameArg = posArgs[0]
+		fileArg = posArgs[1]
+	} else {
+		fileArg = posArgs[0]
+		if len(posArgs) > 1 {
+			nameArg = posArgs[1]
+		}
+	}
+
+	if nameArg == "" {
+		base := filepath.Base(fileArg)
+		nameArg = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+
+	data, err := os.ReadFile(fileArg)
+	if err != nil {
+		return fmt.Errorf("failed to read zip file '%s': %w", fileArg, err)
+	}
+
+	zipB64 := base64.StdEncoding.EncodeToString(data)
+
+	query := `
+		mutation UploadHmiZip($name: String!, $zipBase64: String!, $setAsMain: Boolean) {
+			hmi {
+				uploadZip(name: $name, zipBase64: $zipBase64, setAsMain: $setAsMain) {
+					success
+					message
+					hmi {
+						name
+						nodeId
+						enabled
+						config {
+							urlPath
+							isMain
+							title
+						}
+					}
+				}
+			}
+		}
+	`
+	vars := map[string]any{
+		"name":      nameArg,
+		"zipBase64": zipB64,
+	}
+	if setAsMain != nil {
+		vars["setAsMain"] = *setAsMain
+	}
+
+	var res struct {
+		Data struct {
+			Hmi struct {
+				UploadZip struct {
+					Success bool   `json:"success"`
+					Message string `json:"message"`
+					Hmi     *struct {
+						Name    string `json:"name"`
+						NodeId  string `json:"nodeId"`
+						Enabled bool   `json:"enabled"`
+						Config  struct {
+							UrlPath string `json:"urlPath"`
+							IsMain  bool   `json:"isMain"`
+							Title   string `json:"title"`
+						} `json:"config"`
+					} `json:"hmi"`
+				} `json:"uploadZip"`
+			} `json:"hmi"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := client.DoQuery(ctx, query, vars, &res); err != nil {
+		return err
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
+	}
+
+	result := res.Data.Hmi.UploadZip
+	if client.cfg.JSONMode {
+		return printJSON(result)
+	}
+
+	if !result.Success {
+		errMsg := result.Message
+		if errMsg == "" {
+			errMsg = "unknown error"
+		}
+		return fmt.Errorf("HMI upload failed: %s", errMsg)
+	}
+
+	urlPath := ""
+	if result.Hmi != nil && result.Hmi.Config.UrlPath != "" {
+		urlPath = fmt.Sprintf(" (URL: %s)", result.Hmi.Config.UrlPath)
+	}
+	fmt.Printf("✓ HMI dashboard '%s' imported successfully from '%s'%s\n", nameArg, fileArg, urlPath)
+	return nil
+}
+

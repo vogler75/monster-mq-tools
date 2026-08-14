@@ -6,7 +6,7 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 
 ## Repository Structure
 
-- [`cli/`](file:///Users/vogler/Workspace/monster/cli/cli): The official Go command-line tool `mmqcli` for MonsterMQ GraphQL interfaces.
+- [`cli/`](cli): The official Go command-line tool `mmq` (MonsterMQ CLI) for MonsterMQ GraphQL interfaces.
 - [`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)
 - [`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)
 - [`monstermq-graphql`](.agents/skills/monstermq-graphql/SKILL.md)
@@ -15,7 +15,7 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 
 ## 🚨 Mandatory Rule: Maintaining Skill Files & Documentation
 
-Whenever you modify, add, or deprecate any feature, command, flag, or configuration option in `mmqcli` or any tool in this repository:
+Whenever you modify, add, or deprecate any feature, command, flag, or configuration option in `mmq` or any tool in this repository:
 
 1. **Skill File Maintenance**: You **MUST** update the corresponding skill instruction file located at:
    - [`.agents/skills/monstermq-cli/SKILL.md`](.agents/skills/monstermq-cli/SKILL.md)
@@ -30,7 +30,7 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 
 ## Architecture & Conventions
 
-- **GraphQL Interface**: `mmqcli` communicates with MonsterMQ via HTTP POST GraphQL requests (`cli/client.go`).
+- **GraphQL Interface**: `mmq` communicates with MonsterMQ via HTTP POST GraphQL requests (`cli/client.go`).
 - **Configuration Precedence**: Flags > Environment Variables > `.env` file > Defaults (`http://localhost:4000/graphql`).
 - **Broker Target Support**:
   - **Full Broker**: Supports complete historical archives, daily counts, and multi-topic aggregations.
@@ -42,4 +42,4 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 ## Testing & Verification
 
 - Run unit tests: `cd cli && go test ./...`
-- Verify CLI execution: `cd cli && ./build.sh && bin/mmqcli --help`
+- Verify CLI execution: `cd cli && ./build.sh && bin/mmq --help`

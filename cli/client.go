@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -52,20 +54,104 @@ func LoadDotEnv(filePath string) {
 	}
 }
 
+// BuildEndpointURL constructs the GraphQL URL from flags, environment variables, or defaults.
+func BuildEndpointURL(flagURL, flagHost string, flagPort int, flagHTTPS bool) string {
+	rawURL := flagURL
+	if rawURL == "" && flagHost == "" && flagPort == 0 && !flagHTTPS {
+		rawURL = os.Getenv("MQ_URL")
+		if rawURL == "" {
+			rawURL = os.Getenv("GRAPHQL_URL")
+		}
+	}
+
+	if rawURL != "" {
+		u, err := url.Parse(rawURL)
+		if err == nil && u.Scheme != "" && u.Host != "" {
+			if flagHTTPS {
+				u.Scheme = "https"
+			}
+			host := u.Hostname()
+			port := u.Port()
+			if flagHost != "" {
+				host = strings.TrimPrefix(strings.TrimPrefix(flagHost, "https://"), "http://")
+				if idx := strings.Index(host, "/"); idx != -1 {
+					host = host[:idx]
+				}
+				if idx := strings.Index(host, ":"); idx != -1 {
+					host = host[:idx]
+				}
+			}
+			if flagPort > 0 {
+				port = strconv.Itoa(flagPort)
+			}
+			if port != "" {
+				u.Host = fmt.Sprintf("%s:%s", host, port)
+			} else {
+				u.Host = host
+			}
+			if u.Path == "" {
+				u.Path = "/graphql"
+			}
+			return u.String()
+		}
+	}
+
+	scheme := "http"
+	if flagHTTPS || strings.EqualFold(os.Getenv("MQ_HTTPS"), "true") || strings.EqualFold(os.Getenv("GRAPHQL_HTTPS"), "true") {
+		scheme = "https"
+	}
+
+	host := flagHost
+	if host == "" {
+		host = os.Getenv("MQ_HOST")
+		if host == "" {
+			host = os.Getenv("GRAPHQL_HOST")
+		}
+	}
+	if host == "" {
+		host = "localhost"
+	}
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "https://"), "http://")
+	hostPort := ""
+	if idx := strings.Index(host, "/"); idx != -1 {
+		host = host[:idx]
+	}
+	if idx := strings.Index(host, ":"); idx != -1 {
+		hostPort = host[idx+1:]
+		host = host[:idx]
+	}
+
+	port := flagPort
+	if port == 0 {
+		if hostPort != "" {
+			if p, err := strconv.Atoi(hostPort); err == nil {
+				port = p
+			}
+		}
+	}
+	if port == 0 {
+		if envP := os.Getenv("MQ_PORT"); envP != "" {
+			if p, err := strconv.Atoi(envP); err == nil {
+				port = p
+			}
+		} else if envP := os.Getenv("GRAPHQL_PORT"); envP != "" {
+			if p, err := strconv.Atoi(envP); err == nil {
+				port = p
+			}
+		}
+	}
+	if port == 0 {
+		port = 4000
+	}
+
+	return fmt.Sprintf("%s://%s:%d/graphql", scheme, host, port)
+}
+
 // ResolveClientConfig merges CLI flags, environment variables, and defaults.
-func ResolveClientConfig(flagURL, flagUser, flagPass, flagToken, envFile string, jsonMode bool) *ClientConfig {
+func ResolveClientConfig(flagURL, flagHost string, flagPort int, flagHTTPS bool, flagUser, flagPass, flagToken, envFile string, jsonMode bool) *ClientConfig {
 	LoadDotEnv(envFile)
 
-	url := flagURL
-	if url == "" {
-		url = os.Getenv("MQ_URL")
-	}
-	if url == "" {
-		url = os.Getenv("GRAPHQL_URL")
-	}
-	if url == "" {
-		url = "http://localhost:4000/graphql"
-	}
+	url := BuildEndpointURL(flagURL, flagHost, flagPort, flagHTTPS)
 
 	user := flagUser
 	if user == "" {

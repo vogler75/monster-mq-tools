@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ Edge — Industrial Telemetry & Control HMI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-main: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #26354a;
+            --border: #334155;
+            --border-focus: #38bdf8;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-sky: #38bdf8;
+            --accent-blue: #0284c7;
+            --status-ok: #22c55e;
+            --status-warning: #f59e0b;
+            --status-alarm: #ef4444;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-main);
+            color: var(--text-primary);
+            padding: 1.5rem;
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-title-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--accent-sky), var(--accent-blue));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: #0f172a;
+            font-size: 1.1rem;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--status-ok);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+            font-size: 0.825rem;
+            font-weight: 600;
+        }
+
+        .status-badge.connecting {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--status-warning);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .status-badge.disconnected {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--status-alarm);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .grid-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .card:hover {
+            border-color: rgba(56, 189, 248, 0.4);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .card-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .card-tag {
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            color: var(--accent-sky);
+            background: rgba(56, 189, 248, 0.1);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        .card-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: baseline;
+            gap: 0.35rem;
+        }
+
+        .card-unit {
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .card-footer {
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px dashed var(--border);
+            padding-top: 0.5rem;
+        }
+
+        .grid-main {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .grid-main { grid-template-columns: 1fr; }
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chart-wrapper {
+            position: relative;
+            flex-grow: 1;
+            min-height: 320px;
+        }
+
+        .controls-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+        }
+
+        .btn:hover { background: #0369a1; }
+        .btn:active { transform: scale(0.98); }
+
+        .btn-success { background: #16a34a; }
+        .btn-success:hover { background: #15803d; }
+
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+
+        .btn-secondary {
+            background: #334155;
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover { background: #475569; }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .form-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .form-input, .form-select, .form-textarea {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.55rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: var(--border-focus);
+        }
+
+        .form-textarea {
+            font-family: var(--font-mono);
+            resize: vertical;
+            min-height: 70px;
+        }
+
+        .row-inputs {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .row-inputs > * { flex: 1; }
+
+        .history-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 300px;
+            margin-top: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        th {
+            background: #0f172a;
+            color: var(--text-secondary);
+            padding: 0.65rem 0.85rem;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid #283548;
+            color: var(--text-primary);
+        }
+
+        tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        .code-cell {
+            font-family: var(--font-mono);
+            color: #a7f3d0;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--accent-sky);
+            color: var(--text-primary);
+            padding: 0.85rem 1.25rem;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            gap: 0.75rem;
+            z-index: 100;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-title-container">
+            <div class="logo-icon">M</div>
+            <div>
+                <div class="title">MonsterMQ Edge — Industrial HMI</div>
+                <div class="subtitle">Live Telemetry & Process Control Panel</div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-secondary" onclick="toggleSimulatedData()" id="simBtn">
+                ⚡ Enable Demo Simulator
+            </button>
+            <div class="status-badge connecting" id="wsStatusBadge">
+                <span class="status-dot"></span>
+                <span id="wsStatusText">CONNECTING</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards Grid -->
+    <div class="grid-summary">
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Line Temperature</span>
+                <span class="card-tag">telemetry/temperature</span>
+            </div>
+            <div class="card-value" id="valTemp">
+                -- <span class="card-unit">°C</span>
+            </div>
+            <div class="card-footer">
+                <span>Target: 65.0 °C</span>
+                <span id="tempStatus" style="color: var(--status-ok);">NORMAL</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Hydraulic Pressure</span>
+                <span class="card-tag">telemetry/pressure</span>
+            </div>
+            <div class="card-value" id="valPress">
+                -- <span class="card-unit">bar</span>
+            </div>
+            <div class="card-footer">
+                <span>Range: 4.0 - 8.0 bar</span>
+                <span id="pressStatus" style="color: var(--status-ok);">STABLE</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Motor Speed</span>
+                <span class="card-tag">telemetry/motorspeed</span>
+            </div>
+            <div class="card-value" id="valSpeed">
+                -- <span class="card-unit">RPM</span>
+            </div>
+            <div class="card-footer">
+                <span>Max: 1800 RPM</span>
+                <span id="speedStatus" style="color: var(--status-ok);">ACTIVE</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-label">Broker Node Info</span>
+                <span class="card-tag" id="nodeIdTag">node-1</span>
+            </div>
+            <div class="card-value" style="font-size: 1.5rem;" id="valVersion">
+                MonsterMQ <span class="card-unit">Edge</span>
+            </div>
+            <div class="card-footer">
+                <span id="brokerSessions">Sessions: --</span>
+                <span style="color: var(--accent-sky);" id="brokerRole">Leader</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid-main">
+        <!-- Live Chart Container -->
+        <div class="chart-card">
+            <div class="chart-header">
+                <div class="chart-title">Real-time Telemetry Trend</div>
+                <div style="font-size: 0.8rem; color: var(--text-secondary);" id="lastUpdateText">Listening for topic updates...</div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Control Panel Container -->
+        <div class="controls-card">
+            <div class="panel-title">Line Control Panel</div>
+
+            <!-- Quick Action Buttons -->
+            <div class="quick-actions">
+                <button class="btn btn-success" onclick="publishCommand('controls/line', { state: 'RUNNING' })">
+                    ▶ Start Line
+                </button>
+                <button class="btn btn-danger" onclick="publishCommand('controls/line', { state: 'STOPPED' })">
+                    ⏹ Stop Line
+                </button>
+                <button class="btn btn-secondary" onclick="publishCommand('controls/line', { state: 'RESET' })">
+                    🔄 Reset Alarms
+                </button>
+                <button class="btn btn-secondary" onclick="publishCommand('controls/temp_setpoint', { setpoint: 68.5 })">
+                    🎯 Set Target (68.5°C)
+                </button>
+            </div>
+
+            <!-- Custom Topic Publisher -->
+            <div class="panel-title" style="margin-top: 0.5rem;">Publish Custom MQTT Signal</div>
+
+            <div class="form-group">
+                <label class="form-label">Topic</label>
+                <input type="text" class="form-input" id="pubTopic" value="controls/custom">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Payload (JSON or Text)</label>
+                <textarea class="form-textarea" id="pubPayload">{"command": "SET_SPEED", "rpm": 1250}</textarea>
+            </div>
+
+            <div class="row-inputs">
+                <div class="form-group">
+                    <label class="form-label">QoS</label>
+                    <select class="form-select" id="pubQos">
+                        <option value="0">0 — At most once</option>
+                        <option value="1" selected>1 — At least once</option>
+                        <option value="2">2 — Exactly once</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Retain</label>
+                    <select class="form-select" id="pubRetain">
+                        <option value="false" selected>false</option>
+                        <option value="true">true</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn" style="width: 100%; margin-top: 0.5rem;" onclick="handleCustomPublish()">
+                📡 Publish Signal
+            </button>
+        </div>
+    </div>
+
+    <!-- Historical Telemetry Table -->
+    <div class="history-card">
+        <div class="chart-header">
+            <div class="chart-title">Archived Telemetry History</div>
+            <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 0.4rem 0.8rem;" onclick="fetchArchivedMessages()">
+                🔄 Fetch History
+            </button>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Topic</th>
+                        <th>QoS</th>
+                        <th>Payload</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                            Click "Fetch History" or publish messages to inspect archived telemetry data.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast" id="toast">
+        <span style="color: var(--accent-sky); font-weight: bold;">[HMI]</span>
+        <span id="toastMsg">Action executed successfully</span>
+    </div>
+
+    <!-- Script Section -->
+    <script>
+        // --- 1. Global State & Chart Setup ---
+        let telemetryChart = null;
+        let ws = null;
+        let simInterval = null;
+        let isSimulating = false;
+
+        const maxDataPoints = 25;
+        const chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Temperature (°C)',
+                    data: [],
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Pressure (bar)',
+                    data: [],
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.05)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y1'
+                },
+                {
+                    label: 'Motor Speed (x10 RPM)',
+                    data: [],
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [4, 4],
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                }
+            ]
+        };
+
+        function initChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            telemetryChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#94a3b8', font: { family: 'inherit', size: 12 } }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleColor: '#f8fafc',
+                            bodyColor: '#94a3b8',
+                            borderColor: '#334155',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#64748b', maxRotation: 0 },
+                            grid: { color: 'rgba(51, 65, 85, 0.5)' }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            ticks: { color: '#38bdf8' },
+                            grid: { color: 'rgba(51, 65, 85, 0.5)' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            ticks: { color: '#22c55e' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- 2. Broker Info & History Fetching ---
+        async function fetchBrokerInfo() {
+            try {
+                const res = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `query {
+                            broker {
+                                nodeId
+                                version
+                                isLeader
+                                enabledFeatures
+                                sessions { clientId connected }
+                            }
+                        }`
+                    })
+                });
+                const data = await res.json();
+                if (data.data && data.data.broker) {
+                    const b = data.data.broker;
+                    document.getElementById('nodeIdTag').textContent = b.nodeId || 'node-1';
+                    document.getElementById('valVersion').childNodes[0].nodeValue = (b.version || 'v1.0') + ' ';
+                    document.getElementById('brokerRole').textContent = b.isLeader ? 'Leader Node' : 'Follower Node';
+                    const activeConn = b.sessions ? b.sessions.filter(s => s.connected).length : 0;
+                    document.getElementById('brokerSessions').textContent = `Active Sessions: ${activeConn}`;
+                }
+            } catch (err) {
+                console.warn('Unable to fetch broker status:', err.message);
+            }
+        }
+
+        async function fetchArchivedMessages() {
+            try {
+                const res = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `query {
+                            archivedMessages(topicFilter: "#", limit: 20) {
+                                topic
+                                payload
+                                timestamp
+                                qos
+                            }
+                        }`
+                    })
+                });
+                const data = await res.json();
+                const msgs = (data.data && data.data.archivedMessages) || [];
+                renderHistoryTable(msgs);
+                showToast(`Fetched ${msgs.length} archived messages`);
+            } catch (err) {
+                showToast('Failed to query archived messages: ' + err.message);
+            }
+        }
+
+        function renderHistoryTable(messages) {
+            const tbody = document.getElementById('historyTableBody');
+            if (messages.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No archived messages found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = messages.map(m => {
+                const dateStr = new Date(m.timestamp).toLocaleTimeString();
+                let cleanPayload = m.payload;
+                try {
+                    const parsed = JSON.parse(m.payload);
+                    cleanPayload = JSON.stringify(parsed);
+                } catch(e) {}
+
+                return `<tr>
+                    <td>${dateStr}</td>
+                    <td><span class="card-tag">${m.topic}</span></td>
+                    <td>${m.qos}</td>
+                    <td class="code-cell" title="${escapeHtml(cleanPayload)}">${escapeHtml(cleanPayload)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // --- 3. Command Publishing ---
+        async function publishCommand(topic, payloadObj) {
+            try {
+                const res = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query: `mutation($input: PublishInput!) {
+                            publish(input: $input) {
+                                success
+                                message
+                                topic
+                            }
+                        }`,
+                        variables: {
+                            input: {
+                                topic: topic,
+                                payload: typeof payloadObj === 'object' ? JSON.stringify(payloadObj) : String(payloadObj),
+                                qos: 1,
+                                retain: false
+                            }
+                        }
+                    })
+                });
+                const result = await res.json();
+                if (result.data && result.data.publish && result.data.publish.success) {
+                    showToast(`Signal published to '${topic}'`);
+                } else {
+                    showToast(`Publish error: ${result.errors ? result.errors[0].message : 'Unknown'}`);
+                }
+            } catch (err) {
+                showToast('Error publishing message: ' + err.message);
+            }
+        }
+
+        function handleCustomPublish() {
+            const topic = document.getElementById('pubTopic').value.trim();
+            const payloadRaw = document.getElementById('pubPayload').value.trim();
+            const qos = parseInt(document.getElementById('pubQos').value, 10);
+            const retain = document.getElementById('pubRetain').value === 'true';
+
+            if (!topic) {
+                showToast('Please specify a topic');
+                return;
+            }
+
+            fetch('/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: `mutation($input: PublishInput!) {
+                        publish(input: $input) {
+                            success
+                            message
+                            topic
+                        }
+                    }`,
+                    variables: {
+                        input: { topic, payload: payloadRaw, qos, retain }
+                    }
+                })
+            })
+            .then(res => res.json())
+            .then(res => {
+                if (res.data && res.data.publish && res.data.publish.success) {
+                    showToast(`Published to ${topic}`);
+                } else {
+                    showToast(`Failed: ${res.errors ? res.errors[0].message : 'Server error'}`);
+                }
+            })
+            .catch(err => showToast(`Error: ${err.message}`));
+        }
+
+        // --- 4. WebSocket Live Subscriptions ---
+        function initWebSocket() {
+            const statusBadge = document.getElementById('wsStatusBadge');
+            const statusText = document.getElementById('wsStatusText');
+
+            statusBadge.className = 'status-badge connecting';
+            statusText.textContent = 'CONNECTING';
+
+            const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const wsUrl = wsProtocol + location.host + '/graphql';
+
+            try {
+                ws = new WebSocket(wsUrl, 'graphql-ws');
+            } catch(e) {
+                updateWsStatus(false, 'CONNECTION FAILED');
+                return;
+            }
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'connection_init' }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'connection_ack') {
+                        updateWsStatus(true, 'LIVE CONNECTED');
+                        // Subscribe to telemetry and controls updates
+                        ws.send(JSON.stringify({
+                            id: '1',
+                            type: 'start',
+                            payload: {
+                                query: `subscription {
+                                    topicUpdates(topicFilters: ["telemetry/#", "controls/#"]) {
+                                        topic
+                                        payload
+                                        timestamp
+                                    }
+                                }`
+                            }
+                        }));
+                    } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
+                        const update = msg.payload.data.topicUpdates;
+                        handleTopicMessage(update.topic, update.payload, update.timestamp);
+                    }
+                } catch (e) {
+                    console.error('WS Parse Error:', e);
+                }
+            };
+
+            ws.onerror = () => updateWsStatus(false, 'WS ERROR');
+            ws.onclose = () => {
+                updateWsStatus(false, 'DISCONNECTED');
+                // Reconnect after 3s
+                setTimeout(initWebSocket, 3000);
+            };
+        }
+
+        function updateWsStatus(isConnected, text) {
+            const badge = document.getElementById('wsStatusBadge');
+            const txt = document.getElementById('wsStatusText');
+
+            txt.textContent = text;
+            if (isConnected) {
+                badge.className = 'status-badge';
+            } else if (text.includes('CONNECTING')) {
+                badge.className = 'status-badge connecting';
+            } else {
+                badge.className = 'status-badge disconnected';
+            }
+        }
+
+        function handleTopicMessage(topic, payloadStr, timestamp) {
+            const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString();
+            document.getElementById('lastUpdateText').textContent = `Last signal: ${topic} @ ${timeStr}`;
+
+            let val = payloadStr;
+            try { val = JSON.parse(payloadStr); } catch(e) {}
+
+            let numericVal = typeof val === 'object' && val !== null ? val.value : parseFloat(val);
+
+            if (topic === 'telemetry/temperature' || topic.endsWith('/temperature')) {
+                if (!isNaN(numericVal)) {
+                    document.getElementById('valTemp').childNodes[0].nodeValue = numericVal.toFixed(1) + ' ';
+                    updateChartData(timeStr, numericVal, null, null);
+                }
+            } else if (topic === 'telemetry/pressure' || topic.endsWith('/pressure')) {
+                if (!isNaN(numericVal)) {
+                    document.getElementById('valPress').childNodes[0].nodeValue = numericVal.toFixed(2) + ' ';
+                    updateChartData(timeStr, null, numericVal, null);
+                }
+            } else if (topic === 'telemetry/motorspeed' || topic.endsWith('/motorspeed')) {
+                if (!isNaN(numericVal)) {
+                    document.getElementById('valSpeed').childNodes[0].nodeValue = Math.round(numericVal) + ' ';
+                    updateChartData(timeStr, null, null, numericVal / 10.0);
+                }
+            } else if (topic.startsWith('controls/')) {
+                showToast(`Received control update: ${topic} => ${payloadStr}`);
+            }
+        }
+
+        function updateChartData(timeLabel, tempVal, pressVal, speedVal) {
+            const labels = telemetryChart.data.labels;
+            const dsTemp = telemetryChart.data.datasets[0].data;
+            const dsPress = telemetryChart.data.datasets[1].data;
+            const dsSpeed = telemetryChart.data.datasets[2].data;
+
+            // Maintain label window
+            let lastIndex = labels.length - 1;
+            if (lastIndex < 0 || labels[lastIndex] !== timeLabel) {
+                labels.push(timeLabel);
+                dsTemp.push(tempVal !== null ? tempVal : (dsTemp[lastIndex] || 65.0));
+                dsPress.push(pressVal !== null ? pressVal : (dsPress[lastIndex] || 5.5));
+                dsSpeed.push(speedVal !== null ? speedVal : (dsSpeed[lastIndex] || 120.0));
+            } else {
+                if (tempVal !== null) dsTemp[lastIndex] = tempVal;
+                if (pressVal !== null) dsPress[lastIndex] = pressVal;
+                if (speedVal !== null) dsSpeed[lastIndex] = speedVal;
+            }
+
+            if (labels.length > maxDataPoints) {
+                labels.shift();
+                dsTemp.shift();
+                dsPress.shift();
+                dsSpeed.shift();
+            }
+
+            telemetryChart.update('none');
+        }
+
+        // --- 5. Demo Simulator ---
+        function toggleSimulatedData() {
+            const btn = document.getElementById('simBtn');
+            isSimulating = !isSimulating;
+
+            if (isSimulating) {
+                btn.textContent = '⏹ Stop Demo Simulator';
+                btn.className = 'btn btn-danger';
+                showToast('Demo Telemetry Simulator started');
+
+                let curTemp = 64.5;
+                let curPress = 5.6;
+                let curSpeed = 1250;
+
+                simInterval = setInterval(() => {
+                    curTemp += (Math.random() - 0.48) * 0.8;
+                    curPress += (Math.random() - 0.5) * 0.15;
+                    curSpeed += (Math.random() - 0.5) * 20;
+
+                    // Publish simulated values via GraphQL mutation
+                    publishCommand('telemetry/temperature', { value: parseFloat(curTemp.toFixed(1)) });
+                    publishCommand('telemetry/pressure', { value: parseFloat(curPress.toFixed(2)) });
+                    publishCommand('telemetry/motorspeed', { value: Math.round(curSpeed) });
+                }, 2000);
+            } else {
+                clearInterval(simInterval);
+                btn.textContent = '⚡ Enable Demo Simulator';
+                btn.className = 'btn btn-secondary';
+                showToast('Demo Telemetry Simulator stopped');
+            }
+        }
+
+        // --- 6. Helper UI Functions ---
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            toast.style.display = 'flex';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        // Init on load
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            fetchBrokerInfo();
+            initWebSocket();
+        });
+    </script>
+</body>
+</html>

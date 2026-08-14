@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# build.sh - Build script for mmqcli (MonsterMQ CLI)
+# build.sh - Build script for mmq (MonsterMQ CLI)
 #
 # Usage:
 #   ./build.sh            Build native Go binary for host
@@ -78,25 +78,25 @@ fi
 mkdir -p bin
 
 if [ "$BUILD_NATIVE" = true ]; then
-    echo -e "${GREEN}Building native mmqcli binary (version ${VERSION})...${NC}"
-    CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli .
-    echo -e "${GREEN}✓ Native binary built at: ${YELLOW}cli/bin/mmqcli${NC}"
+    echo -e "${GREEN}Building native mmq binary (version ${VERSION})...${NC}"
+    CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq .
+    echo -e "${GREEN}✓ Native binary built at: ${YELLOW}cli/bin/mmq${NC}"
 fi
 
 if [ "$BUILD_ALL" = true ]; then
-    echo -e "${GREEN}Cross-compiling mmqcli for all targets (version ${VERSION})...${NC}"
+    echo -e "${GREEN}Cross-compiling mmq for all targets (version ${VERSION})...${NC}"
 
     # Linux
-    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-linux-amd64 .
-    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-linux-arm64 .
-    GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-linux-armv7 .
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-linux-amd64 .
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-linux-arm64 .
+    GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-linux-armv7 .
 
     # macOS (Darwin)
-    GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-darwin-amd64 .
-    GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-darwin-arm64 .
+    GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-darwin-amd64 .
+    GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-darwin-arm64 .
 
     # Windows
-    GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmqcli-windows-amd64.exe .
+    GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ${GOFLAGS} -ldflags="${LDFLAGS}" -o bin/mmq-windows-amd64.exe .
 
     echo -e "${GREEN}✓ All binaries built in: ${YELLOW}cli/bin/${NC}"
     ls -lh bin/

@@ -8,6 +8,8 @@ cli/bin/
 *.dylib
 /cli/mmqcli
 /mmqcli
+/cli/mmq
+/mmq
 
 # Test and coverage artifacts
 *.test
