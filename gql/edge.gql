@@ -286,6 +286,7 @@ enum DatabaseConnectionType {
 
 enum DataFormat {
   JSON
+  TEXT
   BINARY
 }
 
@@ -573,13 +574,10 @@ enum PayloadFormat {
 
 input PublishInput {
   topic: String!
-  payload: String
-  payloadBase64: String
-  payloadJson: JSON
-  qos: Int
-  retained: Boolean
-  retain: Boolean
-  format: DataFormat
+  payload: String!
+  format: DataFormat = JSON
+  qos: Int = 0
+  retained: Boolean = false
 }
 
 type PublishResult {
@@ -587,7 +585,6 @@ type PublishResult {
   topic: String!
   timestamp: Long!
   error: String
-  message: String
 }
 
 type PurgeResult {
