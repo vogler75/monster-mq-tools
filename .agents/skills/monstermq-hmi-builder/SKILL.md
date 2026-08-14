@@ -9,85 +9,119 @@ description: >
 
 # MonsterMQ Edge HMI Builder Skill
 
-This skill provides comprehensive instructions, architecture patterns, UI design guidelines, and copy-paste boilerplate code for creating standalone, HTML/JS-based HMIs and dashboards hosted directly by the MonsterMQ Edge broker (e.g. running on Siemens WinCC Unified Comfort Panels or Raspberry Pi).
+This skill provides comprehensive instructions, architecture patterns, UI design guidelines, and copy-paste boilerplate code for creating standalone, HTML/JS-based HMIs and dashboards hosted directly by the MonsterMQ Edge broker (e.g. running on Siemens WinCC Unified Comfort Panels, industrial PCs, or Raspberry Pi).
 
 ---
 
 ## 1. HMI Hosting Architecture & Routing
 
 - **Base Directory**: `./data/hmi/`
-- **Dashboard Structure**: Every dashboard app lives in its own subdirectory under `./data/hmi/<dashboardname>/` containing `index.html` and assets.
-- **Main Dashboard**: Served at `http://<broker>:4000/hmi/` (alias for the designated main dashboard app, default: `main`).
+- **Dashboard Structure**: Every dashboard app lives in its own subdirectory under `./data/hmi/<dashboardname>/` containing `index.html` and static assets.
+- **Main Dashboard**: Served at `http://<broker>:4000/hmi/` (alias for the designated primary dashboard app, default: `main`).
 - **Named Dashboards**: Served at `http://<broker>:4000/hmi/<dashboardname>/`.
 
 ---
 
 ## 2. Broker Data Access (GraphQL API)
 
-All HMIs communicate directly with the broker's GraphQL endpoint (`/graphql`) over HTTP and WebSockets.
+All HMIs communicate directly with the broker's GraphQL endpoint (`/graphql`) over HTTP (`POST /graphql`) and WebSockets (`ws://<broker>:4000/graphql` with `graphql-ws` subprotocol).
 
-### 2.1 Fetching Current Topic Values
+### 2.1 Fetching Current Topic Values (`currentValue` & `currentValues`)
 ```javascript
-async function getTopicValue(topic) {
+// Fetch single topic current value
+async function getTopicValue(topic, archiveGroup = "Default") {
     const query = `
-        query {
-            currentValue(topic: "${topic}") {
+        query GetTopicVal($topic: String!, $group: String!) {
+            currentValue(topic: $topic, format: JSON, archiveGroup: $group) {
                 topic
                 payload
+                format
                 timestamp
+                qos
             }
         }
     `;
     const res = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query, variables: { topic, group: archiveGroup } })
     });
-    const data = await res.json();
-    return data.data.currentValue;
+    const result = await res.json();
+    return result.data?.currentValue;
 }
-```
 
-### 2.2 Reading Historical Messages
-```javascript
-async function getHistory(topicFilter, limit = 100) {
+// Fetch multiple topics by wildcard filter (e.g. "sensors/#")
+async function getTopicValues(topicFilter, limit = 100) {
     const query = `
-        query {
-            archivedMessages(topicFilter: "${topicFilter}", limit: ${limit}) {
+        query GetTopicVals($filter: String!, $limit: Int!) {
+            currentValues(topicFilter: $filter, format: JSON, limit: $limit) {
                 topic
                 payload
+                format
                 timestamp
+                qos
             }
         }
     `;
     const res = await fetch('/graphql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query, variables: { filter: topicFilter, limit } })
     });
-    const data = await res.json();
-    return data.data.archivedMessages || [];
+    const result = await res.json();
+    return result.data?.currentValues || [];
 }
 ```
 
-### 2.3 Publishing Commands / Control Signals
+### 2.2 Reading Historical Messages (`archivedMessages`)
 ```javascript
-async function publishControl(topic, payload) {
+async function getHistory(topicFilter, { startTime = null, endTime = null, limit = 100, archiveGroup = "Default" } = {}) {
     const query = `
-        mutation($input: PublishInput!) {
+        query GetHistory($filter: String!, $start: String, $end: String, $limit: Int!, $group: String!) {
+            archivedMessages(topicFilter: $filter, startTime: $start, endTime: $end, format: JSON, limit: $limit, archiveGroup: $group) {
+                topic
+                payload
+                format
+                timestamp
+                qos
+                clientId
+            }
+        }
+    `;
+    const res = await fetch('/graphql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            query,
+            variables: { filter: topicFilter, start: startTime, end: endTime, limit, group: archiveGroup }
+        })
+    });
+    const result = await res.json();
+    return result.data?.archivedMessages || [];
+}
+```
+
+### 2.3 Publishing Commands & Control Signals (`publish`)
+```javascript
+async function publishControl(topic, payload, { qos = 0, retained = false, format = 'JSON' } = {}) {
+    const query = `
+        mutation PublishCmd($input: PublishInput!) {
             publish(input: $input) {
                 success
-                error
                 topic
+                timestamp
+                error
             }
         }
     `;
+    const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
     const variables = {
         input: {
-            topic: topic,
-            payload: typeof payload === 'object' ? JSON.stringify(payload) : String(payload),
-            qos: 1,
-            retain: false
+            topic,
+            payload: payloadStr,
+            format, // 'JSON', 'TEXT', or 'BINARY'
+            qos,
+            retained // Boolean (default: false)
         }
     };
     const res = await fetch('/graphql', {
@@ -95,38 +129,49 @@ async function publishControl(topic, payload) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, variables })
     });
-    return (await res.json()).data.publish;
+    const result = await res.json();
+    if (result.errors && result.errors.length > 0) {
+        throw new Error(`GraphQL Error: ${result.errors[0].message}`);
+    }
+    if (!result.data.publish.success) {
+        throw new Error(result.data.publish.error || 'Failed to publish control message');
+    }
+    return result.data.publish;
 }
 ```
 
 ### 2.4 Real-time Subscriptions (GraphQL WebSocket)
 ```javascript
 function subscribeTopicUpdates(topicFilters, onUpdate) {
-    const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/graphql';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/graphql`;
     const socket = new WebSocket(wsUrl, 'graphql-ws');
 
     socket.onopen = () => {
-        // Connection init
         socket.send(JSON.stringify({ type: 'connection_init' }));
     };
 
     socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (msg.type === 'connection_ack') {
-            // Subscribe payload
             socket.send(JSON.stringify({
                 id: '1',
                 type: 'start',
                 payload: {
                     query: `
-                        subscription {
-                            topicUpdates(topicFilters: ${JSON.stringify(topicFilters)}) {
+                        subscription LiveTelemetry($filters: [String!]!) {
+                            topicUpdates(topicFilters: $filters, format: JSON) {
                                 topic
                                 payload
+                                format
                                 timestamp
+                                qos
+                                retained
+                                clientId
                             }
                         }
-                    `
+                    `,
+                    variables: { filters: topicFilters }
                 }
             }));
         } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
@@ -142,16 +187,16 @@ function subscribeTopicUpdates(topicFilters, onUpdate) {
 
 ## 3. Industrial UI Design Tokens & Theme
 
-To ensure HMIs feel premium, modern, and readable on industrial panels (Siemens WinCC Comfort Panels), follow this color palette and layout standard:
+To ensure HMIs feel premium, modern, and readable on industrial panels (Siemens WinCC Comfort Panels, touchscreens), follow this color palette and layout standard:
 
 - **Background**: `#0f172a` (Slate 900)
-- **Card Container**: `#1e293b` (Slate 800) with `border: 1px solid #334155`
+- **Card / Surface Container**: `#1e293b` (Slate 800) with `border: 1px solid #334155`
 - **Primary Text**: `#f8fafc` (Slate 50)
 - **Secondary Text**: `#94a3b8` (Slate 400)
 - **Accent Primary**: `#38bdf8` (Sky 400)
-- **Status OK**: `#22c55e` (Emerald 500)
+- **Status OK / Running**: `#22c55e` (Emerald 500)
 - **Status Warning**: `#f59e0b` (Amber 500)
-- **Status Alarm**: `#ef4444` (Red 500)
+- **Status Alarm / Stopped**: `#ef4444` (Red 500)
 
 ---
 
@@ -165,7 +210,7 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Industrial Monitoring HMI</title>
+    <title>Industrial Monitoring & Control HMI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -178,16 +223,20 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
         .card-label { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.5rem; }
         .card-value { font-size: 2.25rem; font-weight: 700; color: #f8fafc; }
         .card-unit { font-size: 1rem; color: #64748b; font-weight: 400; }
-        .chart-container { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; height: 350px; }
+        .chart-container { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; height: 350px; margin-bottom: 1.5rem; }
+        .controls-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
         .btn { background: #0284c7; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background: #0369a1; }
         .btn:active { transform: scale(0.98); }
+        .btn-danger { background: #dc2626; }
+        .btn-danger:hover { background: #b91c1c; }
+        .control-input { background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 0.5rem 0.75rem; border-radius: 6px; width: 100px; font-size: 1rem; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="title">Production Line A — Live Telemetry</div>
-        <div class="status-badge" id="connStatus">CONNECTED</div>
+        <div class="title">Production Line A — Live Telemetry & Control</div>
+        <div class="status-badge" id="connStatus">CONNECTING...</div>
     </div>
 
     <div class="grid">
@@ -207,6 +256,14 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
 
     <div class="chart-container">
         <canvas id="lineChart"></canvas>
+    </div>
+
+    <div class="controls-card">
+        <span style="font-weight: 600; color: #94a3b8;">Setpoint Control:</span>
+        <input type="number" id="targetSpeed" class="control-input" value="1500" step="50" min="0" max="3000">
+        <button class="btn" onclick="applySetpoint()">Set Motor RPM</button>
+        <button class="btn btn-danger" onclick="emergencyStop()">E-STOP</button>
+        <span id="cmdFeedback" style="font-size: 0.875rem; color: #34d399; margin-left: auto;"></span>
     </div>
 
     <script>
@@ -236,6 +293,63 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
             }
         });
 
+        // GraphQL Query Helper
+        async function graphqlFetch(query, variables = {}) {
+            const res = await fetch('/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, variables })
+            });
+            const json = await res.json();
+            if (json.errors && json.errors.length > 0) throw new Error(json.errors[0].message);
+            return json.data;
+        }
+
+        // Publish Control Signals
+        async function publishTopic(topic, payload, retained = false) {
+            const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
+            const query = `
+                mutation Publish($input: PublishInput!) {
+                    publish(input: $input) {
+                        success
+                        topic
+                        timestamp
+                        error
+                    }
+                }
+            `;
+            const data = await graphqlFetch(query, {
+                input: { topic, payload: payloadStr, format: 'JSON', qos: 1, retained }
+            });
+            if (!data.publish.success) throw new Error(data.publish.error || 'Publish failed');
+            return data.publish;
+        }
+
+        async function applySetpoint() {
+            const rpm = parseFloat(document.getElementById('targetSpeed').value);
+            const fb = document.getElementById('cmdFeedback');
+            try {
+                await publishTopic('factory/line1/motor/setpoint', { speedRpm: rpm });
+                fb.textContent = `✓ Setpoint ${rpm} RPM sent`;
+                fb.style.color = '#34d399';
+            } catch (err) {
+                fb.textContent = `✗ Error: ${err.message}`;
+                fb.style.color = '#ef4444';
+            }
+        }
+
+        async function emergencyStop() {
+            const fb = document.getElementById('cmdFeedback');
+            try {
+                await publishTopic('factory/line1/motor/estop', { stop: true, timestamp: Date.now() });
+                fb.textContent = `⚠ E-STOP Triggered!`;
+                fb.style.color = '#ef4444';
+            } catch (err) {
+                fb.textContent = `✗ Error: ${err.message}`;
+                fb.style.color = '#ef4444';
+            }
+        }
+
         // Live Subscriptions via GraphQL WS
         const wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/graphql';
         const ws = new WebSocket(wsUrl, 'graphql-ws');
@@ -244,11 +358,15 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
         ws.onmessage = (e) => {
             const msg = JSON.parse(e.data);
             if (msg.type === 'connection_ack') {
+                document.getElementById('connStatus').textContent = 'CONNECTED';
+                document.getElementById('connStatus').style.background = '#064e3b';
+                document.getElementById('connStatus').style.color = '#34d399';
+
                 ws.send(JSON.stringify({
                     id: '1',
                     type: 'start',
                     payload: {
-                        query: `subscription { topicUpdates(topicFilters: ["telemetry/#"]) { topic payload timestamp } }`
+                        query: `subscription { topicUpdates(topicFilters: ["factory/line1/#"], format: JSON) { topic payload timestamp retained } }`
                     }
                 }));
             } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
@@ -257,14 +375,20 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
             }
         };
 
+        ws.onclose = () => {
+            document.getElementById('connStatus').textContent = 'DISCONNECTED';
+            document.getElementById('connStatus').style.background = '#7f1d1d';
+            document.getElementById('connStatus').style.color = '#fca5a5';
+        };
+
         function handleTopicUpdate(topic, payloadStr, timestamp) {
             try {
                 const val = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
                 const timeStr = new Date(timestamp).toLocaleTimeString();
 
                 if (topic.endsWith('/temperature')) {
-                    const temp = typeof val === 'object' ? val.value : val;
-                    document.getElementById('tempVal').childNodes[0].nodeValue = temp.toFixed(1) + ' ';
+                    const temp = typeof val === 'object' ? val.value ?? val.temp : val;
+                    document.getElementById('tempVal').childNodes[0].nodeValue = Number(temp).toFixed(1) + ' ';
                     
                     chart.data.labels.push(timeStr);
                     chart.data.datasets[0].data.push(temp);
@@ -273,8 +397,14 @@ When creating a new HMI screen, generate a self-contained single-file HTML like 
                         chart.data.datasets[0].data.shift();
                     }
                     chart.update();
+                } else if (topic.endsWith('/pressure')) {
+                    const press = typeof val === 'object' ? val.value ?? val.pressure : val;
+                    document.getElementById('pressVal').childNodes[0].nodeValue = Number(press).toFixed(2) + ' ';
+                } else if (topic.endsWith('/speed')) {
+                    const spd = typeof val === 'object' ? val.value ?? val.rpm : val;
+                    document.getElementById('speedVal').childNodes[0].nodeValue = Math.round(spd) + ' ';
                 }
-            } catch (err) { console.error('Parse error', err); }
+            } catch (err) { console.error('Payload parse error', err); }
         }
     </script>
 </body>

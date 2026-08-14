@@ -427,6 +427,41 @@ func TestRunGetValue(t *testing.T) {
 	}
 }
 
+func TestRunSetValue(t *testing.T) {
+	var capturedVars map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		var req struct {
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		capturedVars = req.Variables
+
+		_, _ = w.Write([]byte(`{"data":{"publish":{"success":true,"error":null,"topic":"sensors/temp","timestamp":1786683732069}}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(&ClientConfig{URL: server.URL, Timeout: 5 * time.Second})
+	ctx := context.Background()
+
+	err := runSetValue(ctx, client, []string{"sensors/temp", `{"val": 25.5}`, "--retain", "--qos", "1"})
+	if err != nil {
+		t.Fatalf("runSetValue failed: %v", err)
+	}
+	if capturedVars["topic"] != "sensors/temp" {
+		t.Errorf("expected topic sensors/temp, got %v", capturedVars["topic"])
+	}
+	if capturedVars["retained"] != true {
+		t.Errorf("expected retained true, got %v", capturedVars["retained"])
+	}
+	if capturedVars["qos"] != float64(1) {
+		t.Errorf("expected qos 1, got %v", capturedVars["qos"])
+	}
+}
+
 func TestCommandHelpFlags(t *testing.T) {
 	client := NewClient(&ClientConfig{URL: "http://localhost:4000/graphql", Timeout: 5 * time.Second})
 	ctx := context.Background()

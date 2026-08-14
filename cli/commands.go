@@ -249,20 +249,22 @@ func runSetValue(ctx context.Context, client *Client, args []string) error {
 	}
 
 	query := `
-		mutation Publish($topic: String!, $payload: String, $qos: Int, $retain: Boolean) {
-			publish(input: { topic: $topic, payload: $payload, qos: $qos, retain: $retain }) {
+		mutation Publish($topic: String!, $payload: String!, $qos: Int, $retained: Boolean) {
+			publish(input: { topic: $topic, payload: $payload, qos: $qos, retained: $retained }) {
 				success
-				message
+				error
 				topic
+				timestamp
 			}
 		}
 	`
 	var res struct {
 		Data struct {
 			Publish struct {
-				Success bool   `json:"success"`
-				Message string `json:"message"`
-				Topic   string `json:"topic"`
+				Success   bool   `json:"success"`
+				Error     string `json:"error"`
+				Topic     string `json:"topic"`
+				Timestamp int64  `json:"timestamp"`
 			} `json:"publish"`
 		} `json:"data"`
 		Errors []struct {
@@ -271,10 +273,10 @@ func runSetValue(ctx context.Context, client *Client, args []string) error {
 	}
 
 	if err := client.DoQuery(ctx, query, map[string]any{
-		"topic":   topic,
-		"payload": payload,
-		"qos":     qos,
-		"retain":  retain,
+		"topic":    topic,
+		"payload":  payload,
+		"qos":      qos,
+		"retained": retain,
 	}, &res); err != nil {
 		return err
 	}
@@ -289,7 +291,7 @@ func runSetValue(ctx context.Context, client *Client, args []string) error {
 	if res.Data.Publish.Success {
 		fmt.Printf("Published to topic '%s' successfully\n", topic)
 	} else {
-		fmt.Printf("Failed to publish: %s\n", res.Data.Publish.Message)
+		fmt.Printf("Failed to publish: %s\n", res.Data.Publish.Error)
 	}
 	return nil
 }

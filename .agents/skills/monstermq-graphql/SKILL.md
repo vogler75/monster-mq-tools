@@ -6,7 +6,7 @@ description: >
 
 # MonsterMQ Data GraphQL Skill Guide
 
-This skill provides complete schemas, query patterns, and JavaScript code examples for fetching, streaming, and storing telemetry and topic data from **MonsterMQ Broker** (Full/Main and Edge nodes) via GraphQL.
+This skill provides complete schemas, query patterns, and JavaScript code examples for fetching, streaming, publishing, and archiving telemetry and topic data from **MonsterMQ Broker** (Full/Main and Edge nodes) via GraphQL.
 
 ---
 
@@ -20,47 +20,85 @@ MonsterMQ exposes a unified GraphQL endpoint for both HTTP queries/mutations and
   - `Content-Type: application/json`
   - `Authorization: Bearer <jwt-token>` (if authentication is enabled)
 
+### Core Payload Formats (`DataFormat` Enum)
+Many queries, mutations, and subscriptions accept an optional `format: DataFormat = JSON` argument:
+- `JSON`: Parses payload string as JSON (or passes standard JSON string).
+- `TEXT`: Handles payload as plain UTF-8 text string.
+- `BINARY`: Handles payload as Base64-encoded binary string.
+
 ---
 
-## 2. Topic Value Inspection & Search
+## 2. Topic Value Inspection & Search (`Query`)
 
-### 2.1 Get Current Value of a Single Topic
-Fetch the latest/current stored value for a topic from a specific archive group.
+### 2.1 Get Current Value of a Single Topic (`currentValue`)
+Fetch the latest stored value for an exact topic from the LastValueStore.
 
 ```graphql
-query GetTopicCurrentValue($topic: String!, $archiveGroup: String = "Default") {
-  currentValue(topic: $topic, format: JSON, archiveGroup: $archiveGroup) {
+query GetTopicCurrentValue($topic: String!, $format: DataFormat = JSON, $archiveGroup: String = "Default") {
+  currentValue(topic: $topic, format: $format, archiveGroup: $archiveGroup) {
     topic
     payload
     format
     timestamp
     qos
+    messageExpiryInterval
+    contentType
+    responseTopic
+    payloadFormatIndicator
+    userProperties {
+      key
+      value
+    }
   }
 }
 ```
 
-### 2.2 Get Current Values by Topic Filter Pattern
-Fetch current values across multiple topics matching wildcard filters (e.g., `factory/floor1/#`).
+### 2.2 Get Current Values by Topic Filter (`currentValues`)
+Fetch current values across multiple topics matching MQTT wildcards (e.g., `sensors/+/temperature`, `factory/#`).
 
 ```graphql
-query GetCurrentValuesFilter($filter: String!, $limit: Int = 100) {
-  currentValues(topicFilter: $filter, format: JSON, limit: $limit) {
+query GetCurrentValuesFilter($topicFilter: String!, $format: DataFormat = JSON, $limit: Int = 100, $archiveGroup: String = "Default") {
+  currentValues(topicFilter: $topicFilter, format: $format, limit: $limit, archiveGroup: $archiveGroup) {
     topic
     payload
+    format
     timestamp
     qos
+    contentType
+    userProperties {
+      key
+      value
+    }
   }
 }
 ```
 
-### 2.3 Fetch Retained Messages
-Query retained messages directly from the broker's retained store.
+### 2.3 Fetch Retained Messages (`retainedMessage` & `retainedMessages`)
+Query messages explicitly published with `retained: true`.
 
 ```graphql
-query GetRetainedMessages($filter: String) {
-  retainedMessages(topicFilter: $filter, limit: 100) {
+# Single topic retained message
+query GetRetainedMessage($topic: String!, $format: DataFormat = JSON) {
+  retainedMessage(topic: $topic, format: $format) {
     topic
     payload
+    format
+    timestamp
+    qos
+    contentType
+    userProperties {
+      key
+      value
+    }
+  }
+}
+
+# Filter retained messages
+query GetRetainedMessages($topicFilter: String, $format: DataFormat = JSON, $limit: Int = 100) {
+  retainedMessages(topicFilter: $topicFilter, format: $format, limit: $limit) {
+    topic
+    payload
+    format
     timestamp
     qos
     contentType
@@ -68,12 +106,30 @@ query GetRetainedMessages($filter: String) {
 }
 ```
 
-### 2.4 Search Active Topics
-Search active topic paths matching wildcard patterns across archive groups.
+### 2.4 Browse Topic Hierarchy Level-by-Level (`browseTopics`)
+Browse children nodes and leaf values under a topic prefix.
 
 ```graphql
-query SearchTopics($pattern: String!, $archiveGroup: String = "Default") {
-  searchTopics(pattern: $pattern, limit: 100, archiveGroup: $archiveGroup)
+query BrowseTopicTree($topic: String!, $archiveGroup: String = "Default") {
+  browseTopics(topic: $topic, archiveGroup: $archiveGroup) {
+    name
+    isLeaf
+    value(format: JSON) {
+      topic
+      payload
+      timestamp
+      qos
+    }
+  }
+}
+```
+
+### 2.5 Search Active Topics (`searchTopics`)
+Search active topic paths matching wildcard patterns (`*`, `%`, `#`) across archive groups.
+
+```graphql
+query SearchTopics($pattern: String!, $limit: Int = 100, $archiveGroup: String = "Default") {
+  searchTopics(pattern: $pattern, limit: $limit, archiveGroup: $archiveGroup)
 }
 ```
 
@@ -81,7 +137,7 @@ query SearchTopics($pattern: String!, $archiveGroup: String = "Default") {
 
 ## 3. Data Publishing & Writing (`Mutation`)
 
-### 3.1 Publish Single Message Payload
+### 3.1 Publish Single Message Payload (`publish`)
 Publish a message to a topic with QoS and retain flags.
 
 ```graphql
@@ -95,22 +151,34 @@ mutation PublishMessage($input: PublishInput!) {
 }
 ```
 
+#### `PublishInput` Schema Definition:
+- **`topic`** (`String!`): Exact MQTT topic name (no wildcards).
+- **`payload`** (`String!`): Message payload string (JSON string, plain text, or Base64 binary).
+- **`format`** (`DataFormat`): `JSON` (default), `TEXT`, or `BINARY`.
+- **`qos`** (`Int`): MQTT QoS level (`0`, `1`, or `2`, default: `0`).
+- **`retained`** (`Boolean`): Retain flag (`true` or `false`, default: `false`).
+
+#### `PublishResult` Response Schema:
+- **`success`** (`Boolean!`): `true` if published successfully.
+- **`topic`** (`String!`): Published topic name.
+- **`timestamp`** (`Long!`): Epoch millisecond timestamp of publication.
+- **`error`** (`String`): Error details if failed, or `null` on success.
+
 **Variables Example**:
 ```json
 {
   "input": {
     "topic": "sensors/temperature/room1",
     "payload": "{\"value\": 23.4, \"unit\": \"C\"}",
+    "format": "JSON",
     "qos": 1,
-    "retained": true,
-    "format": "JSON"
+    "retained": true
   }
 }
 ```
-> **Note**: For retain flag compatibility across brokers, pass `"retained": true` (Main Broker standard) or `"retain": true` (Edge Broker).
 
-### 3.2 Batch Publish Messages
-Publish multiple telemetry readings in a single HTTP POST request.
+### 3.2 Batch Publish Messages (`publishBatch`)
+Publish multiple telemetry readings in a single HTTP request.
 
 ```graphql
 mutation PublishBatchMessages($inputs: [PublishInput!]!) {
@@ -123,12 +191,34 @@ mutation PublishBatchMessages($inputs: [PublishInput!]!) {
 }
 ```
 
+**Variables Example**:
+```json
+{
+  "inputs": [
+    {
+      "topic": "line1/motor/speed",
+      "payload": "{\"rpm\": 1450}",
+      "format": "JSON",
+      "qos": 0,
+      "retained": false
+    },
+    {
+      "topic": "line1/motor/temp",
+      "payload": "{\"temp\": 65.2}",
+      "format": "JSON",
+      "qos": 1,
+      "retained": true
+    }
+  ]
+}
+```
+
 ---
 
 ## 4. Archive Groups & Historical Data
 
-### 4.1 Inspect Deployed Archive Groups
-List all configured archive groups, enabled status, storage types, and target database connections.
+### 4.1 Inspect Deployed Archive Groups (`archiveGroups`)
+List all configured archive groups, enabled status, storage types, retention, and database connections.
 
 ```graphql
 query ListArchiveGroups {
@@ -136,11 +226,19 @@ query ListArchiveGroups {
     name
     enabled
     deployed
+    deploymentId
     topicFilter
     retainedOnly
     lastValType
     archiveType
     databaseConnectionName
+    payloadFormat
+    lastValRetention
+    archiveRetention
+    purgeInterval
+    queueType
+    queueSize
+    bulkSize
   }
 }
 ```
@@ -153,15 +251,19 @@ query QueryMessageHistory(
   $topicFilter: String!
   $startTime: String
   $endTime: String
+  $format: DataFormat = JSON
   $limit: Int = 100
   $archiveGroup: String = "Default"
+  $includeTopic: Boolean = true
 ) {
   archivedMessages(
     topicFilter: $topicFilter
     startTime: $startTime
     endTime: $endTime
+    format: $format
     limit: $limit
     archiveGroup: $archiveGroup
+    includeTopic: $includeTopic
   ) {
     topic
     payload
@@ -169,6 +271,11 @@ query QueryMessageHistory(
     timestamp
     qos
     clientId
+    contentType
+    userProperties {
+      key
+      value
+    }
   }
 }
 ```
@@ -234,8 +341,8 @@ query QueryAggregated(
 {
   "topics": ["telemetry/sensor1", "telemetry/sensor2"],
   "interval": "FIVE_MINUTES",
-  "startTime": "2026-08-13T00:00:00Z",
-  "endTime": "2026-08-13T12:00:00Z",
+  "startTime": "2026-08-14T00:00:00Z",
+  "endTime": "2026-08-14T12:00:00Z",
   "functions": ["AVG", "MAX"],
   "archiveGroup": "Default"
 }
@@ -248,8 +355,8 @@ query QueryAggregated(
     "aggregatedMessages": {
       "columns": ["timestamp", "telemetry/sensor1_avg", "telemetry/sensor1_max"],
       "rows": [
-        ["2026-08-13T10:00:00Z", 22.4, 25.1],
-        ["2026-08-13T10:05:00Z", 23.1, 26.0]
+        ["2026-08-14T10:00:00Z", 22.4, 25.1],
+        ["2026-08-14T10:05:00Z", 23.1, 26.0]
       ],
       "rowCount": 2
     }
@@ -265,14 +372,15 @@ Stream live topic updates to dashboards using standard `graphql-ws` WebSockets.
 
 ### 6.1 Subscribe to Topic Updates (`topicUpdates`)
 ```graphql
-subscription OnTopicUpdate($filters: [String!]!) {
-  topicUpdates(topicFilters: $filters, format: JSON) {
+subscription OnTopicUpdate($filters: [String!]!, $format: DataFormat = JSON) {
+  topicUpdates(topicFilters: $filters, format: $format) {
     topic
     payload
     format
     timestamp
     qos
     retained
+    clientId
   }
 }
 ```
@@ -281,8 +389,8 @@ subscription OnTopicUpdate($filters: [String!]!) {
 Batch real-time updates for high-frequency topics into single WebSocket frames.
 
 ```graphql
-subscription OnTopicUpdateBulk($filters: [String!]!, $timeoutMs: Int = 500, $maxSize: Int = 50) {
-  topicUpdatesBulk(topicFilters: $filters, format: JSON, timeoutMs: $timeoutMs, maxSize: $maxSize) {
+subscription OnTopicUpdateBulk($filters: [String!]!, $format: DataFormat = JSON, $timeoutMs: Int = 1000, $maxSize: Int = 100) {
+  topicUpdatesBulk(topicFilters: $filters, format: $format, timeoutMs: $timeoutMs, maxSize: $maxSize) {
     count
     timestamp
     updates {
@@ -292,6 +400,7 @@ subscription OnTopicUpdateBulk($filters: [String!]!, $timeoutMs: Int = 500, $max
       timestamp
       qos
       retained
+      clientId
     }
   }
 }
@@ -322,13 +431,49 @@ async function graphqlFetch(query, variables = {}, token = null) {
   return res.data;
 }
 
-// Example Usage:
-// const data = await graphqlFetch(`query { currentValue(topic: "sensors/temp") { payload } }`);
+// Publish Helper
+async function publishTopic(topic, payload, { qos = 0, retained = false, format = 'JSON' } = {}) {
+  const payloadStr = typeof payload === 'object' ? JSON.stringify(payload) : String(payload);
+  const query = `
+    mutation Publish($input: PublishInput!) {
+      publish(input: $input) {
+        success
+        topic
+        timestamp
+        error
+      }
+    }
+  `;
+  const data = await graphqlFetch(query, {
+    input: { topic, payload: payloadStr, format, qos, retained }
+  });
+  if (!data.publish.success) {
+    throw new Error(data.publish.error || 'Failed to publish message');
+  }
+  return data.publish;
+}
+
+// Fetch Current Value Helper
+async function fetchCurrentValue(topic, archiveGroup = "Default") {
+  const query = `
+    query GetVal($topic: String!, $group: String!) {
+      currentValue(topic: $topic, format: JSON, archiveGroup: $group) {
+        topic
+        payload
+        format
+        timestamp
+        qos
+      }
+    }
+  `;
+  const data = await graphqlFetch(query, { topic, group: archiveGroup });
+  return data.currentValue;
+}
 ```
 
 ### 7.2 WebSocket Subscription Manager
 ```javascript
-function subscribeToBrokerTopics(topicFilters, onMessageCallback) {
+function subscribeToBrokerTopics(topicFilters, onMessageCallback, { format = 'JSON' } = {}) {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${location.host}/graphql`;
   const socket = new WebSocket(wsUrl, 'graphql-ws');
@@ -346,17 +491,19 @@ function subscribeToBrokerTopics(topicFilters, onMessageCallback) {
         type: 'start',
         payload: {
           query: `
-            subscription LiveData($filters: [String!]!) {
-              topicUpdates(topicFilters: $filters) {
+            subscription LiveData($filters: [String!]!, $format: DataFormat) {
+              topicUpdates(topicFilters: $filters, format: $format) {
                 topic
                 payload
+                format
                 timestamp
                 qos
                 retained
+                clientId
               }
             }
           `,
-          variables: { filters: topicFilters }
+          variables: { filters: topicFilters, format }
         }
       }));
     } else if (msg.type === 'data' && msg.payload && msg.payload.data) {
