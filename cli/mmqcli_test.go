@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestLoadDotEnv(t *testing.T) {
@@ -847,6 +849,74 @@ func TestRunExportHmiZipUnzip(t *testing.T) {
 		t.Errorf("unexpected app.js content: %s", string(jsContent))
 	}
 }
+
+func TestWebSocketSubscribe(t *testing.T) {
+	upgrader := websocket.Upgrader{
+		Subprotocols: []string{"graphql-transport-ws"},
+		CheckOrigin:  func(r *http.Request) bool { return true },
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Read connection_init
+		var msg wsMessage
+		if err := conn.ReadJSON(&msg); err != nil {
+			return
+		}
+		if msg.Type == "connection_init" {
+			_ = conn.WriteJSON(wsMessage{Type: "connection_ack"})
+		}
+
+		// Read subscribe
+		if err := conn.ReadJSON(&msg); err != nil {
+			return
+		}
+
+		// Send a next update
+		dataPayload := `{"data":{"topicUpdates":{"topic":"sensors/temp","payload":"25.5","format":"JSON","timestamp":1786683732069,"qos":0,"retained":false}}}`
+		_ = conn.WriteJSON(wsMessage{
+			ID:      msg.ID,
+			Type:    "next",
+			Payload: json.RawMessage(dataPayload),
+		})
+
+		// Wait for complete or close
+		_ = conn.ReadJSON(&msg)
+	}))
+	defer server.Close()
+
+	// Test URL conversion
+	wsURL := toWebSocketURL(server.URL, "")
+	if !strings.HasPrefix(wsURL, "ws://") {
+		t.Errorf("expected ws://, got %s", wsURL)
+	}
+
+	httpsWS := toWebSocketURL("https://broker.example.com/graphql", "")
+	if httpsWS != "wss://broker.example.com/graphql" {
+		t.Errorf("expected wss://broker.example.com/graphql, got %s", httpsWS)
+	}
+
+	// Test runSubscribe help
+	client := NewClient(&ClientConfig{URL: server.URL, Timeout: 5 * time.Second})
+	if err := runSubscribe(context.Background(), client, []string{"-h"}); err != nil {
+		t.Errorf("expected nil error for help, got %v", err)
+	}
+
+	// Test streaming subscription with timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	err := runSubscribeStream(ctx, client, wsURL, []string{"sensors/temp"}, "JSON", false)
+	if err != nil {
+		t.Fatalf("runSubscribeStream failed: %v", err)
+	}
+}
+
 
 
 

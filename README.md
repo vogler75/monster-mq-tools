@@ -57,6 +57,12 @@ mmq [localhost:4000]> exit
 # Publish a retained topic value
 ./bin/mmq publish sensors/temp/room1 '{"temp": 22.5}' --retain
 
+# Subscribe to real-time topic updates via WebSocket
+./bin/mmq subscribe "sensors/#" "factory/line1/+"
+
+# Interactive live dashboard topic monitor
+./bin/mmq monitor "sensors/#"
+
 # Query time-series metric aggregations over the last hour
 ./bin/mmq aggregatedMessages sensors/temp/room1 --interval FIVE_MINUTES --functions AVG --last-seconds 3600
 

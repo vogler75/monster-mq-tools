@@ -209,6 +209,39 @@ mmq publish <topic> <payload> [--retain] [--qos 0|1|2]
 mmq publish sensors/temp/room1 '{"temp": 22.5, "unit": "C"}' --retain --qos 1
 ```
 
+#### `subscribe`
+Subscribe to real-time topic updates via WebSocket (`graphql-transport-ws`). Automatically derives the WebSocket URL (`ws://` or `wss://`) from the connected broker HTTP endpoint, supporting multiple simultaneous topic filters and Ctrl+C cancellation.
+
+```bash
+mmq subscribe <topic1> [topic2...] [options]
+```
+
+*Examples:*
+```bash
+# Subscribe to wildcard telemetry stream:
+mmq subscribe "sensors/#" "factory/line1/+"
+
+# Stream raw JSON lines:
+mmq --json subscribe "sensors/#"
+```
+
+#### `monitor`
+Interactive full-screen text-based live monitor table that tracks and displays current topic values in-place without cluttering scroll history. Supports terminal scrolling, sorting, and pause.
+
+```bash
+mmq monitor [topic-filters...]
+# or: mmq subscribe "sensors/#" --monitor
+```
+
+*Interactive Controls:*
+- `↑` / `↓` or `k` / `j`: Scroll rows up/down
+- `PgUp` / `PgDn`: Scroll by page
+- `Home` / `End` or `g` / `G`: Jump to top/bottom
+- `s`: Cycle sort order (Alphabetical -> Timestamp -> Update Count)
+- `p`: Pause/Resume live updates
+- `c`: Clear tracked topics
+- `q` / `Ctrl+C`: Exit monitor and restore terminal
+
 #### `searchTopics`
 Search active topics matching a pattern or wildcard across both the persistent archive store and live retained message store. Automatically handles glob patterns (`*Watt*`), SQL LIKE syntax (`%Watt%`), and MQTT topic filters (`sensors/#`).
 

@@ -35,6 +35,8 @@ Commands:
   retainedMessages [filter]                   List retained messages matching a topic filter
   browseTopics [path]                         Browse topic hierarchy level-by-level
   publish <topic> <payload>                   Publish payload to a topic (--retain, --qos)
+  subscribe <topics...>                       Subscribe to real-time topic updates via WebSocket
+  monitor <topics...>                         Interactive live dashboard monitor for topic updates
   archivedMessages <topic>                    Query historical time-series messages
   aggregatedMessages <topics...>              Query aggregated time-series metric data
   archiveGroups                               List all deployed archive storage groups
@@ -156,6 +158,10 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 		return runGetValues(ctx, client, subargs)
 	case "publish":
 		return runSetValue(ctx, client, subargs)
+	case "subscribe":
+		return runSubscribe(ctx, client, subargs)
+	case "monitor":
+		return runMonitor(ctx, client, subargs)
 	case "searchTopics":
 		return runListTopics(ctx, client, subargs)
 	case "browseTopics":

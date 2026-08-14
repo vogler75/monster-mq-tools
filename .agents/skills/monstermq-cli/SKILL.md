@@ -75,6 +75,8 @@ mmq --port 4001 features
 - **`retainedMessages [filter]`**: List retained messages matching a topic filter
 - **`browseTopics [path]`**: Browse topic hierarchy level-by-level
 - **`publish <topic> <payload>`**: Publish message payload (`--retain`, `--qos 0|1|2`)
+- **`subscribe <topics...>`**: Subscribe to real-time topic updates via WebSocket (`--ws-url`, `--format`, `--raw`)
+- **`monitor <topics...>`**: Interactive live dashboard table to view incoming topic values in-place with scrolling
 - **`archivedMessages <topic> [archiveGroup]`**: Query historical time-series messages (defaults to last 60s window)
 - **`aggregatedMessages <topics...>`**: Query server-side time-series aggregations (`AVG`, `MIN`, `MAX`)
 - **`archiveGroups`**: List all deployed archive storage groups

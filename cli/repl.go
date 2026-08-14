@@ -121,6 +121,8 @@ func buildCompleter() *readline.PrefixCompleter {
 		readline.PcItem("currentValue"),
 		readline.PcItem("currentValues"),
 		readline.PcItem("publish"),
+		readline.PcItem("subscribe"),
+		readline.PcItem("monitor"),
 		readline.PcItem("retainedMessages"),
 		readline.PcItem("browseTopics"),
 		readline.PcItem("archivedMessages"),
@@ -257,6 +259,8 @@ Broker & Topic Operations:
   retainedMessages [filter]                   List retained messages matching a topic filter
   browseTopics [path]                         Browse topic hierarchy level-by-level
   publish <topic> <payload>                   Publish payload (--retain, --qos 0|1|2)
+  subscribe <topics...>                       Subscribe to real-time topic updates via WebSocket
+  monitor <topics...>                         Interactive live dashboard monitor for topic updates
   archivedMessages <topic>                    Query historical time-series messages
   aggregatedMessages <topics...>              Query aggregated time-series metrics
   archiveGroups                               List all deployed archive storage groups

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -300,3 +301,17 @@ func (c *Client) rawDo(ctx context.Context, query string, variables map[string]a
 
 	return json.Unmarshal(respBytes, resultPtr)
 }
+
+func basicAuthHeader(username, password string) string {
+	auth := username + ":" + password
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
+}
+
+// WebSocketURL returns the WebSocket URL equivalent of the client GraphQL URL.
+func (c *Client) WebSocketURL(customWS ...string) string {
+	if len(customWS) > 0 && customWS[0] != "" {
+		return customWS[0]
+	}
+	return toWebSocketURL(c.cfg.URL, "")
+}
+

@@ -22,7 +22,49 @@ This skill provides comprehensive instructions, architecture patterns, UI design
 
 ---
 
-## 2. Broker Data Access (GraphQL API)
+## 2. Deploying & Testing HMIs with MonsterMQ CLI (`mmq`)
+
+The MonsterMQ CLI tool (`mmq` in `cli/bin/mmq`) provides native commands to build, package, deploy, inspect, and test HMI dashboards directly against local or remote edge brokers.
+
+> [!TIP]
+> See the companion skill [**`monstermq-cli`**](file:///Users/vogler/Workspace/monster/tools/.agents/skills/monstermq-cli/SKILL.md) for the complete CLI reference.
+
+### 2.1 HMI Dashboard Lifecycle Commands
+| Task | CLI Command |
+| :--- | :--- |
+| **List Dashboards** | `mmq hmis` *(or `mmq hmi list`)* |
+| **Create Definition** | `mmq hmi create <name> --title "Title" --path /<name> [--main]` |
+| **Deploy from Folder** | `mmq importHmiZip <folder-path> [name] [--main]` *(auto-zips in memory)* |
+| **Deploy from Zip** | `mmq importHmiZip <package.zip> [name] [--main]` |
+| **Export to Folder** | `mmq exportHmiZip <name> <target-dir> --unzip` *(auto-extracts files)* |
+| **Export to Zip** | `mmq exportHmiZip <name> [output.zip]` |
+| **Delete Dashboard** | `mmq hmi remove <name1> [name2...]` |
+
+### 2.2 Telemetry Simulation & UI Testing Commands
+When developing or testing an HMI screen, use `mmq` to discover topics and inject mock sensor data:
+
+```bash
+# 1. Discover active topics for widget binding
+mmq searchTopics "factory/#"
+
+# 2. Inspect current topic values
+mmq currentValue factory/line1/temperature
+
+# 3. Publish mock live telemetry to test gauges and charts
+mmq publish factory/line1/temperature '{"temp": 24.8, "unit": "C"}'
+mmq publish factory/line1/pressure '{"bar": 4.2}'
+mmq publish factory/line1/speed '{"rpm": 1500}'
+
+# 4. Check historical time-series data for chart validation
+mmq archivedMessages factory/line1/temperature --last-seconds 300
+
+# 5. Connect to remote Edge devices or WinCC panels
+mmq --host 192.168.1.50 --port 4001
+```
+
+---
+
+## 3. Broker Data Access (GraphQL API)
 
 All HMIs communicate directly with the broker's GraphQL endpoint (`/graphql`) over HTTP (`POST /graphql`) and WebSockets (`ws://<broker>:4000/graphql` with **`graphql-transport-ws`** subprotocol).
 
@@ -205,7 +247,7 @@ function subscribeTopicUpdates(topicFilters, onUpdate) {
 
 ---
 
-## 3. Industrial UI Design Tokens & Theme
+## 4. Industrial UI Design Tokens & Theme
 
 To ensure HMIs feel premium, modern, and readable on industrial panels (Siemens WinCC Comfort Panels, touchscreens), follow this color palette and layout standard:
 
@@ -220,7 +262,7 @@ To ensure HMIs feel premium, modern, and readable on industrial panels (Siemens 
 
 ---
 
-## 4. Complete Boilerplate Dashboard Template
+## 5. Complete Boilerplate Dashboard Template
 
 When creating a new HMI screen, generate a self-contained single-file HTML like the one below:
 
