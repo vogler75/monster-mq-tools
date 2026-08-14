@@ -91,7 +91,6 @@ mutation PublishMessage($input: PublishInput!) {
     topic
     timestamp
     error
-    message
   }
 }
 ```
@@ -120,7 +119,6 @@ mutation PublishBatchMessages($inputs: [PublishInput!]!) {
     topic
     timestamp
     error
-    message
   }
 }
 ```

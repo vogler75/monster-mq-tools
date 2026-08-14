@@ -1,10 +1,13 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -2337,28 +2340,49 @@ func runDatabaseConnections(ctx context.Context, client *Client, args []string) 
 
 func runExportHmiZip(ctx context.Context, client *Client, args []string) error {
 	if len(args) < 1 || hasHelpFlag(args) {
-		fmt.Println("Usage: mmq exportHmiZip <dashboard-name> [output-file.zip]")
+		fmt.Println("Usage: mmq exportHmiZip <dashboard-name> [output-file.zip] [options]")
+		fmt.Println("       mmq exportHmiZip <dashboard-name> [target-directory] --unzip")
 		fmt.Println()
-		fmt.Println("Export a deployed HMI dashboard as a binary zip file.")
+		fmt.Println("Export a deployed HMI dashboard as a binary zip file or extract to a folder.")
 		fmt.Println()
 		fmt.Println("Arguments:")
 		fmt.Println("  <dashboard-name>         Name of the deployed HMI dashboard (required)")
-		fmt.Println("  [output-file.zip]        Output zip file path (default: <dashboard-name>.zip)")
+		fmt.Println("  [output-file.zip]        Output zip file path or target directory (default: <dashboard-name>.zip)")
 		fmt.Println()
 		fmt.Println("Options:")
+		fmt.Println("  --unzip, -u              Extract and unzip dashboard files directly into a target folder")
 		fmt.Println("  -h, --help               Show this help text")
 		return nil
 	}
 
-	name := args[0]
-	outFile := ""
-	if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
-		outFile = args[1]
+	var name, outTarget string
+	unzipMode := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--unzip" || arg == "-u" {
+			unzipMode = true
+		} else if !strings.HasPrefix(arg, "-") {
+			if name == "" {
+				name = arg
+			} else if outTarget == "" {
+				outTarget = arg
+			}
+		}
 	}
-	if outFile == "" {
-		outFile = name
-		if !strings.HasSuffix(strings.ToLower(outFile), ".zip") {
-			outFile += ".zip"
+
+	if name == "" {
+		return fmt.Errorf("missing dashboard name")
+	}
+
+	if outTarget == "" {
+		if unzipMode {
+			outTarget = name
+		} else {
+			outTarget = name
+			if !strings.HasSuffix(strings.ToLower(outTarget), ".zip") {
+				outTarget += ".zip"
+			}
 		}
 	}
 
@@ -2393,20 +2417,37 @@ func runExportHmiZip(ctx context.Context, client *Client, args []string) error {
 		return fmt.Errorf("failed to decode base64 zip data: %w", err)
 	}
 
-	if err := os.WriteFile(outFile, zipBytes, 0644); err != nil {
-		return fmt.Errorf("error writing zip file '%s': %w", outFile, err)
+	if unzipMode {
+		if err := unzipBytesToDir(zipBytes, outTarget); err != nil {
+			return err
+		}
+		if client.cfg.JSONMode {
+			return printJSON(map[string]any{
+				"name":      name,
+				"directory": outTarget,
+				"unzipped":  true,
+				"sizeBytes": len(zipBytes),
+				"success":   true,
+			})
+		}
+		fmt.Printf("✓ Exported and unzipped HMI dashboard '%s' into '%s/' (%d bytes archive)\n", name, outTarget, len(zipBytes))
+		return nil
+	}
+
+	if err := os.WriteFile(outTarget, zipBytes, 0644); err != nil {
+		return fmt.Errorf("error writing zip file '%s': %w", outTarget, err)
 	}
 
 	if client.cfg.JSONMode {
 		return printJSON(map[string]any{
 			"name":      name,
-			"file":      outFile,
+			"file":      outTarget,
 			"sizeBytes": len(zipBytes),
 			"success":   true,
 		})
 	}
 
-	fmt.Printf("✓ Exported HMI dashboard '%s' to '%s' (%d bytes)\n", name, outFile, len(zipBytes))
+	fmt.Printf("✓ Exported HMI dashboard '%s' to '%s' (%d bytes)\n", name, outTarget, len(zipBytes))
 	return nil
 }
 
@@ -2415,16 +2456,135 @@ func fileExists(p string) bool {
 	return err == nil && !info.IsDir()
 }
 
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}
+
+func zipDirectory(sourceDir string) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+
+	err := filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+
+		if relPath == "." {
+			return nil
+		}
+
+		zipPath := filepath.ToSlash(relPath)
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = zipPath
+
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		w, err := zw.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			if _, err := io.Copy(w, file); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		_ = zw.Close()
+		return nil, err
+	}
+
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+func unzipBytesToDir(zipBytes []byte, destDir string) error {
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		return fmt.Errorf("invalid zip archive: %w", err)
+	}
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory '%s': %w", destDir, err)
+	}
+
+	cleanDest := filepath.Clean(destDir)
+
+	for _, f := range zr.File {
+		targetPath := filepath.Join(destDir, filepath.Clean(f.Name))
+
+		// Security: Prevent ZipSlip vulnerability
+		if !strings.HasPrefix(targetPath, cleanDest+string(os.PathSeparator)) && targetPath != cleanDest {
+			return fmt.Errorf("illegal file path in zip archive: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(targetPath, f.Mode()); err != nil {
+				return fmt.Errorf("failed to create directory '%s': %w", targetPath, err)
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return fmt.Errorf("failed to create parent directory for '%s': %w", targetPath, err)
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("failed to read file '%s' from zip: %w", f.Name, err)
+		}
+
+		outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			_ = rc.Close()
+			return fmt.Errorf("failed to create output file '%s': %w", targetPath, err)
+		}
+
+		_, copyErr := io.Copy(outFile, rc)
+		_ = rc.Close()
+		_ = outFile.Close()
+		if copyErr != nil {
+			return fmt.Errorf("failed to extract file '%s': %w", targetPath, copyErr)
+		}
+	}
+	return nil
+}
+
 func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 	if len(args) < 1 || hasHelpFlag(args) {
-		fmt.Println("Usage: mmq importHmiZip <file.zip> [dashboard-name] [options]")
-		fmt.Println("       mmq importHmiZip <dashboard-name> <file.zip> [options]")
+		fmt.Println("Usage: mmq importHmiZip <file.zip|directory> [dashboard-name] [options]")
+		fmt.Println("       mmq importHmiZip <dashboard-name> <file.zip|directory> [options]")
 		fmt.Println()
-		fmt.Println("Upload and deploy an HMI web dashboard from a binary zip file.")
+		fmt.Println("Upload and deploy an HMI web dashboard from a binary zip file or local directory.")
 		fmt.Println()
 		fmt.Println("Arguments:")
-		fmt.Println("  <file.zip>               Path to the local .zip file package (required)")
-		fmt.Println("  [dashboard-name]         Name for the HMI dashboard (defaults to zip filename)")
+		fmt.Println("  <file.zip|directory>     Path to the .zip file package or folder to auto-zip (required)")
+		fmt.Println("  [dashboard-name]         Name for the HMI dashboard (defaults to zip/folder name)")
 		fmt.Println()
 		fmt.Println("Options:")
 		fmt.Println("  --main, -m               Set this dashboard as the primary / default HMI")
@@ -2432,7 +2592,7 @@ func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 		return nil
 	}
 
-	var fileArg, nameArg string
+	var sourceArg, nameArg string
 	var setAsMain *bool
 
 	posArgs := []string{}
@@ -2447,35 +2607,48 @@ func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 	}
 
 	if len(posArgs) < 1 {
-		return fmt.Errorf("missing zip file or dashboard name")
+		return fmt.Errorf("missing zip file or dashboard directory")
 	}
 
-	if strings.HasSuffix(strings.ToLower(posArgs[0]), ".zip") || fileExists(posArgs[0]) {
-		fileArg = posArgs[0]
+	if strings.HasSuffix(strings.ToLower(posArgs[0]), ".zip") || fileExists(posArgs[0]) || isDir(posArgs[0]) {
+		sourceArg = posArgs[0]
 		if len(posArgs) > 1 {
 			nameArg = posArgs[1]
 		}
-	} else if len(posArgs) > 1 && (strings.HasSuffix(strings.ToLower(posArgs[1]), ".zip") || fileExists(posArgs[1])) {
+	} else if len(posArgs) > 1 && (strings.HasSuffix(strings.ToLower(posArgs[1]), ".zip") || fileExists(posArgs[1]) || isDir(posArgs[1])) {
 		nameArg = posArgs[0]
-		fileArg = posArgs[1]
+		sourceArg = posArgs[1]
 	} else {
-		fileArg = posArgs[0]
+		sourceArg = posArgs[0]
 		if len(posArgs) > 1 {
 			nameArg = posArgs[1]
 		}
 	}
 
 	if nameArg == "" {
-		base := filepath.Base(fileArg)
+		base := filepath.Base(sourceArg)
 		nameArg = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 
-	data, err := os.ReadFile(fileArg)
-	if err != nil {
-		return fmt.Errorf("failed to read zip file '%s': %w", fileArg, err)
+	var zipBytes []byte
+	var err error
+	var sourceDesc string
+
+	if isDir(sourceArg) {
+		sourceDesc = fmt.Sprintf("directory '%s' (auto-zipped)", sourceArg)
+		zipBytes, err = zipDirectory(sourceArg)
+		if err != nil {
+			return fmt.Errorf("failed to zip directory '%s': %w", sourceArg, err)
+		}
+	} else {
+		sourceDesc = fmt.Sprintf("file '%s'", sourceArg)
+		zipBytes, err = os.ReadFile(sourceArg)
+		if err != nil {
+			return fmt.Errorf("failed to read file '%s': %w", sourceArg, err)
+		}
 	}
 
-	zipB64 := base64.StdEncoding.EncodeToString(data)
+	zipB64 := base64.StdEncoding.EncodeToString(zipBytes)
 
 	query := `
 		mutation UploadHmiZip($name: String!, $zipBase64: String!, $setAsMain: Boolean) {
@@ -2553,7 +2726,7 @@ func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 	if result.Hmi != nil && result.Hmi.Config.UrlPath != "" {
 		urlPath = fmt.Sprintf(" (URL: %s)", result.Hmi.Config.UrlPath)
 	}
-	fmt.Printf("✓ HMI dashboard '%s' imported successfully from '%s'%s\n", nameArg, fileArg, urlPath)
+	fmt.Printf("✓ HMI dashboard '%s' imported successfully from %s%s\n", nameArg, sourceDesc, urlPath)
 	return nil
 }
 

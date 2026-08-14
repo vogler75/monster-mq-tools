@@ -764,7 +764,7 @@
                         query: `mutation($input: PublishInput!) {
                             publish(input: $input) {
                                 success
-                                message
+                                error
                                 topic
                             }
                         }`,
@@ -807,7 +807,7 @@
                     query: `mutation($input: PublishInput!) {
                         publish(input: $input) {
                             success
-                            message
+                            error
                             topic
                         }
                     }`,

@@ -77,7 +77,8 @@ async function publishControl(topic, payload) {
         mutation($input: PublishInput!) {
             publish(input: $input) {
                 success
-                message
+                error
+                topic
             }
         }
     `;

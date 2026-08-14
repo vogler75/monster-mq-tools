@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -696,6 +698,121 @@ func TestRunHmiCreateAndRemove(t *testing.T) {
 		t.Errorf("expected name 'new-hmi', got %v", capturedVars["name"])
 	}
 }
+
+func TestRunImportHmiZipFromDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	hmiSrcDir := filepath.Join(tempDir, "sample-hmi-dir")
+	_ = os.MkdirAll(filepath.Join(hmiSrcDir, "css"), 0755)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, "index.html"), []byte("<h1>Hello HMI</h1>"), 0644)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, "css", "style.css"), []byte("body { color: red; }"), 0644)
+
+	var capturedVars map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		var req struct {
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		capturedVars = req.Variables
+
+		_, _ = w.Write([]byte(`{"data":{"hmi":{"uploadZip":{"success":true,"message":"OK","hmi":{"name":"sample-hmi-dir","nodeId":"local","enabled":true,"config":{"urlPath":"/sample-hmi-dir","isMain":false,"title":"sample-hmi-dir"}}}}}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(&ClientConfig{URL: server.URL, Timeout: 5 * time.Second})
+	ctx := context.Background()
+
+	// Upload directory directly
+	err := ExecuteCommand(ctx, client, []string{"importHmiZip", hmiSrcDir})
+	if err != nil {
+		t.Fatalf("importHmiZip on directory failed: %v", err)
+	}
+
+	if capturedVars["name"] != "sample-hmi-dir" {
+		t.Errorf("expected auto-detected name 'sample-hmi-dir', got %v", capturedVars["name"])
+	}
+
+	zipB64, ok := capturedVars["zipBase64"].(string)
+	if !ok || zipB64 == "" {
+		t.Fatalf("expected non-empty zipBase64")
+	}
+
+	// Verify the generated zip contains the files
+	zipBytes, err := base64.StdEncoding.DecodeString(zipB64)
+	if err != nil {
+		t.Fatalf("failed to decode base64: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(zipBytes), int64(len(zipBytes)))
+	if err != nil {
+		t.Fatalf("failed to read zip payload: %v", err)
+	}
+
+	fileMap := make(map[string]bool)
+	for _, f := range zr.File {
+		fileMap[f.Name] = true
+	}
+	if !fileMap["index.html"] {
+		t.Errorf("expected index.html in zip, got %v", fileMap)
+	}
+	if !fileMap["css/style.css"] {
+		t.Errorf("expected css/style.css in zip, got %v", fileMap)
+	}
+}
+
+func TestRunExportHmiZipUnzip(t *testing.T) {
+	tempDir := t.TempDir()
+	outExtractDir := filepath.Join(tempDir, "extracted-hmi")
+
+	// Create in-memory zip
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w, _ := zw.Create("index.html")
+	_, _ = w.Write([]byte("<h1>Dashboard Content</h1>"))
+	w2, _ := zw.Create("app.js")
+	_, _ = w2.Write([]byte("console.log('running');"))
+	_ = zw.Close()
+
+	zipB64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"data":{"exportHmiZip":"%s"}}`, zipB64)))
+	}))
+	defer server.Close()
+
+	client := NewClient(&ClientConfig{URL: server.URL, Timeout: 5 * time.Second})
+	ctx := context.Background()
+
+	// Export with --unzip to directory
+	err := ExecuteCommand(ctx, client, []string{"exportHmiZip", "my-dash", outExtractDir, "--unzip"})
+	if err != nil {
+		t.Fatalf("exportHmiZip --unzip failed: %v", err)
+	}
+
+	// Verify extracted files exist
+	htmlContent, err := os.ReadFile(filepath.Join(outExtractDir, "index.html"))
+	if err != nil {
+		t.Fatalf("failed to read extracted index.html: %v", err)
+	}
+	if string(htmlContent) != "<h1>Dashboard Content</h1>" {
+		t.Errorf("unexpected index.html content: %s", string(htmlContent))
+	}
+
+	jsContent, err := os.ReadFile(filepath.Join(outExtractDir, "app.js"))
+	if err != nil {
+		t.Fatalf("failed to read extracted app.js: %v", err)
+	}
+	if string(jsContent) != "console.log('running');" {
+		t.Errorf("unexpected app.js content: %s", string(jsContent))
+	}
+}
+
 
 
 

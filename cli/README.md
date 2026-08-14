@@ -419,33 +419,38 @@ mmq hmi remove <name1> [name2...]
 ```
 
 #### `exportHmiZip` / `hmi export`
-Export deployed HMI package as a binary zip file (saved as `<name>.zip` by default or to a custom path).
+Export deployed HMI package as a binary zip file or extract directly into a target folder using `--unzip`.
 
 ```bash
 mmq exportHmiZip <dashboard-name> [output-file.zip]
-# or: mmq hmi export <dashboard-name> [output-file.zip]
-```
-
-*Example:*
-```bash
-mmq exportHmiZip FactoryOverview
-# ✓ Exported HMI dashboard 'FactoryOverview' to 'FactoryOverview.zip' (45210 bytes)
-```
-
-#### `importHmiZip`
-Upload and deploy an HMI web dashboard from a binary zip file.
-
-```bash
-mmq importHmiZip <file.zip> [dashboard-name] [--main]
+mmq exportHmiZip <dashboard-name> [target-directory] --unzip
 ```
 
 *Examples:*
 ```bash
-# Upload and auto-infer dashboard name from filename:
+# Save as zip archive:
+mmq exportHmiZip FactoryOverview
+# ✓ Exported HMI dashboard 'FactoryOverview' to 'FactoryOverview.zip' (45210 bytes)
+
+# Extract directly to folder:
+mmq exportHmiZip FactoryOverview ./src/hmi --unzip
+# ✓ Exported and unzipped HMI dashboard 'FactoryOverview' into './src/hmi/' (45210 bytes archive)
+```
+
+#### `importHmiZip` / `hmi import`
+Upload and deploy an HMI web dashboard from a binary zip file or local directory (automatically zipped on upload).
+
+```bash
+mmq importHmiZip <file.zip|directory> [dashboard-name] [--main]
+```
+
+*Examples:*
+```bash
+# Upload a zip archive:
 mmq importHmiZip ./dist/FactoryOverview.zip
 
-# Upload and set as the primary/default dashboard:
-mmq importHmiZip ./dist/FactoryOverview.zip FactoryOverview --main
+# Upload a directory directly (automatically zipped and deployed):
+mmq importHmiZip ./src/hmi FactoryOverview --main
 ```
 
 ---
