@@ -1214,6 +1214,8 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 		fmt.Println("Options:")
 		fmt.Println("  --depth <n>, -d <n>       Maximum composition depth")
 		fmt.Println("  --name <name>, -n <name>  Subscription display name")
+		fmt.Println("  --poll <interval>         Use Sync polling instead of SSE stream (e.g. --poll 1s)")
+		fmt.Println("  --no-initial              Skip initial value snapshot query")
 		fmt.Println("  -h, --help                Show this help text")
 		return nil
 	}
@@ -1221,6 +1223,8 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 	var elementIDs []string
 	name := "i3x-watch"
 	var maxDepth *int
+	pollInterval := time.Duration(0)
+	showInitial := true
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -1236,6 +1240,16 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 				}
 				i++
 			}
+		case "--poll", "-p":
+			pollInterval = 1 * time.Second
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				if d, err := time.ParseDuration(args[i+1]); err == nil {
+					pollInterval = d
+					i++
+				}
+			}
+		case "--no-initial":
+			showInitial = false
 		default:
 			if !strings.HasPrefix(args[i], "-") {
 				elementIDs = append(elementIDs, args[i])
@@ -1260,6 +1274,9 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to create watch subscription: %w", err)
 	}
 	subID := subResp.SubscriptionID
+	if subResp.ClientID != "" {
+		clientID = subResp.ClientID
+	}
 
 	// Setup cleanup on exit / interrupt
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1281,29 +1298,117 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 	}()
 
 	// Register items
+	depthVal := 1
+	if maxDepth != nil {
+		depthVal = *maxDepth
+	}
 	regBulk, err := h.client.RegisterMonitoredItems(ctx, clientID, subID, elementIDs, maxDepth)
 	if err != nil {
 		return fmt.Errorf("failed to register items: %w", err)
 	}
+	registeredCount := 0
 	for _, item := range regBulk.Results {
 		if !item.Success {
 			id := "-"
 			if item.ElementID != nil {
 				id = *item.ElementID
 			}
-			fmt.Fprintf(h.formatter.Out, "%s Failed to register %s\n", h.formatter.color(colorRed, "✗"), id)
+			errDetail := ""
+			if item.ResponseDetail != nil {
+				errDetail = ": " + item.ResponseDetail.Error()
+			}
+			fmt.Fprintf(h.formatter.Out, "%s Failed to register %s%s\n", h.formatter.color(colorRed, "✗"), id, errDetail)
+		} else {
+			registeredCount++
 		}
 	}
 
+	if registeredCount == 0 && len(regBulk.Results) > 0 {
+		return fmt.Errorf("failed to register any of the specified element IDs on subscription")
+	}
+
+	// Query and show initial current value snapshot
+	if showInitial {
+		initBulk, initErr := h.client.QueryLastKnownValues(ctx, elementIDs, depthVal)
+		if initErr == nil && initBulk != nil && len(initBulk.Results) > 0 {
+			hasValue := false
+			for _, item := range initBulk.Results {
+				if item.Success && item.Result != nil {
+					hasValue = true
+					id := "-"
+					if item.ElementID != nil {
+						id = *item.ElementID
+					}
+					ts := item.Result.Timestamp
+					if ts == "" {
+						ts = FormatTimeRFC3339(time.Now())
+					}
+					fmt.Fprintf(h.formatter.Out, "[%s] %s %s = %s (%s)\n",
+						h.formatter.color(colorDim, ts),
+						h.formatter.color(colorYellow, "[INITIAL]"),
+						h.formatter.color(colorCyan+colorBold, id),
+						formatValue(item.Result.Value),
+						h.formatter.fmtQuality(item.Result.Quality))
+				}
+			}
+			if !hasValue {
+				fmt.Fprintln(h.formatter.Out, h.formatter.color(colorDim, "• No initial value recorded on server yet."))
+			}
+		}
+	}
+
+	// Polling mode fallback
+	if pollInterval > 0 {
+		fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s, Interval: %v)... Press Ctrl+C to exit.\n",
+			h.formatter.color(colorGreen, "✓"),
+			h.formatter.color(colorBold, "Polling subscription updates via sync"),
+			h.formatter.color(colorCyan, subID),
+			pollInterval)
+
+		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+		var lastSeq *int
+
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ticker.C:
+				batches, syncErr := h.client.SyncSubscription(ctx, clientID, subID, lastSeq)
+				if syncErr != nil {
+					fmt.Fprintf(h.formatter.Out, "%s Sync error: %v\n", h.formatter.color(colorRed, "✗"), syncErr)
+					continue
+				}
+				for _, b := range batches {
+					lastSeq = &b.SequenceNumber
+					for _, u := range b.Updates {
+						fmt.Fprintf(h.formatter.Out, "[%s] #%d %s = %s (%s)\n",
+							h.formatter.color(colorDim, u.Timestamp),
+							b.SequenceNumber,
+							h.formatter.color(colorCyan+colorBold, u.ElementID),
+							formatValue(u.Value),
+							h.formatter.fmtQuality(u.Quality))
+					}
+				}
+			}
+		}
+	}
+
+	// SSE Streaming mode
 	fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s)... Press Ctrl+C to exit.\n",
 		h.formatter.color(colorGreen, "✓"),
 		h.formatter.color(colorBold, "Streaming real-time updates via SSE"),
 		h.formatter.color(colorCyan, subID))
 
-	return h.client.StreamSubscription(ctx, clientID, subID, func(event SSEEvent) error {
+	err = h.client.StreamSubscription(ctx, clientID, subID, func(event SSEEvent) error {
 		h.formatter.PrintLiveStreamEvent(event)
 		return nil
 	})
+	if err != nil {
+		fmt.Fprintf(h.formatter.Out, "%s Stream ended: %v\n", h.formatter.color(colorRed, "•"), err)
+		return err
+	}
+	return nil
 }
 
 // Helper to parse relative duration (e.g. -1h, -15m, 1h ago) or RFC3339 timestamps

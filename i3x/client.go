@@ -508,6 +508,7 @@ func (c *Client) DeleteSubscriptions(ctx context.Context, clientID string, subsc
 }
 
 // StreamSubscription opens an SSE connection via POST /v1/subscriptions/stream
+// (or GET fallback if server requires GET).
 func (c *Client) StreamSubscription(ctx context.Context, clientID, subscriptionID string, handler func(event SSEEvent) error) error {
 	if clientID == "" {
 		clientID = c.cfg.ClientID
@@ -525,7 +526,12 @@ func (c *Client) StreamSubscription(ctx context.Context, clientID, subscriptionI
 		return fmt.Errorf("failed to marshal stream request: %w", err)
 	}
 
-	fullURL := c.apiBase + "/subscriptions/stream"
+	// Include query parameters for servers/gateways that extract them from the URL
+	q := url.Values{}
+	q.Set("clientId", clientID)
+	q.Set("subscriptionId", subscriptionID)
+	fullURL := c.apiBase + "/subscriptions/stream?" + q.Encode()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create stream request: %w", err)
@@ -563,6 +569,35 @@ func (c *Client) StreamSubscription(ctx context.Context, clientID, subscriptionI
 		return fmt.Errorf("stream connection failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// If POST is not allowed (HTTP 405), fallback to GET
+	if resp.StatusCode == http.StatusMethodNotAllowed {
+		resp.Body.Close()
+		getReq, getErr := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+		if getErr == nil {
+			getReq.Header.Set("User-Agent", c.cfg.UserAgent)
+			getReq.Header.Set("Accept", "text/event-stream")
+			getReq.Header.Set("Cache-Control", "no-cache")
+			getReq.Header.Set("Connection", "keep-alive")
+			if c.cfg.Token != "" {
+				getReq.Header.Set("Authorization", "Bearer "+c.cfg.Token)
+			}
+			if c.cfg.APIKey != "" {
+				getReq.Header.Set("X-API-Key", c.cfg.APIKey)
+			}
+			for k, v := range c.cfg.Headers {
+				getReq.Header.Set(k, v)
+			}
+			if c.cfg.Verbose {
+				fmt.Fprintf(os.Stderr, "--> GET %s (SSE Stream fallback)\n", fullURL)
+			}
+			resp, err = streamClient.Do(getReq)
+			if err != nil {
+				return fmt.Errorf("stream GET connection failed: %w", err)
+			}
+			defer resp.Body.Close()
+		}
+	}
 
 	if resp.StatusCode >= 400 {
 		respBytes, _ := io.ReadAll(resp.Body)
@@ -642,5 +677,16 @@ func defaultClientID() string {
 	if err != nil || h == "" {
 		h = "i3x-cli"
 	}
-	return fmt.Sprintf("%s-%d", h, time.Now().UnixNano()%1000000)
+	// Clean hostname to keep it alphanumeric
+	var clean strings.Builder
+	for _, r := range h {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			clean.WriteRune(r)
+		}
+	}
+	name := clean.String()
+	if name == "" {
+		name = "i3x-cli"
+	}
+	return fmt.Sprintf("%s-%d", name, time.Now().UnixNano()%1000000)
 }
