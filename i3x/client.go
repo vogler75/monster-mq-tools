@@ -462,11 +462,86 @@ func (c *Client) SyncSubscription(ctx context.Context, clientID, subscriptionID 
 		SubscriptionID:     subscriptionID,
 		LastSequenceNumber: lastSeq,
 	}
-	var resp SuccessResponse[[]SyncBatch]
-	if err := c.doRequest(ctx, http.MethodPost, "/subscriptions/sync", nil, req, &resp); err != nil {
+	var raw json.RawMessage
+	if err := c.doRequest(ctx, http.MethodPost, "/subscriptions/sync", nil, req, &raw); err != nil {
 		return nil, err
 	}
-	return resp.Result, nil
+	return ParseSyncBatches(raw)
+}
+
+// ParseSyncBatches parses any variant of sync/stream payload into []SyncBatch.
+// It flexibly handles single objects, flat arrays, batch arrays, and wrapped envelopes.
+func ParseSyncBatches(data []byte) ([]SyncBatch, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	// 1. Direct array of SyncBatch: [{"sequenceNumber": 1, "updates": [...]}]
+	var batches []SyncBatch
+	if err := json.Unmarshal(data, &batches); err == nil && len(batches) > 0 && len(batches[0].Updates) > 0 {
+		return batches, nil
+	}
+
+	// 2. Direct flat array of SyncUpdateEntry: [{"elementId": "...", "value": ...}]
+	var entries []SyncUpdateEntry
+	if err := json.Unmarshal(data, &entries); err == nil && len(entries) > 0 && entries[0].ElementID != "" {
+		return []SyncBatch{{SequenceNumber: 1, Updates: entries}}, nil
+	}
+
+	// 3. Direct single SyncBatch object: {"sequenceNumber": 1, "updates": [...]}
+	var batch SyncBatch
+	if err := json.Unmarshal(data, &batch); err == nil && (len(batch.Updates) > 0 || batch.SequenceNumber > 0) {
+		return []SyncBatch{batch}, nil
+	}
+
+	// 4. Direct single SyncUpdateEntry object: {"elementId": "...", "value": ...}
+	var entry SyncUpdateEntry
+	if err := json.Unmarshal(data, &entry); err == nil && entry.ElementID != "" {
+		return []SyncBatch{{SequenceNumber: 1, Updates: []SyncUpdateEntry{entry}}}, nil
+	}
+
+	// 5. Envelope inspection (e.g. {"success": true, "result": ...} or {"results": [...]})
+	var envelope struct {
+		Success bool            `json:"success"`
+		Result  json.RawMessage `json:"result"`
+		Results json.RawMessage `json:"results"`
+		Updates json.RawMessage `json:"updates"`
+	}
+	if err := json.Unmarshal(data, &envelope); err == nil {
+		if len(envelope.Updates) > 0 {
+			var updateList []SyncUpdateEntry
+			if err := json.Unmarshal(envelope.Updates, &updateList); err == nil && len(updateList) > 0 {
+				return []SyncBatch{{SequenceNumber: 1, Updates: updateList}}, nil
+			}
+		}
+		if len(envelope.Result) > 0 {
+			resBatches, resErr := ParseSyncBatches(envelope.Result)
+			if resErr == nil && len(resBatches) > 0 {
+				return resBatches, nil
+			}
+		}
+		if len(envelope.Results) > 0 {
+			var bulkItems []BulkResultItem[SyncUpdateEntry]
+			if err := json.Unmarshal(envelope.Results, &bulkItems); err == nil && len(bulkItems) > 0 {
+				var items []SyncUpdateEntry
+				for _, it := range bulkItems {
+					if it.Result != nil {
+						items = append(items, *it.Result)
+					}
+				}
+				if len(items) > 0 {
+					return []SyncBatch{{SequenceNumber: 1, Updates: items}}, nil
+				}
+			}
+			resBatches, resErr := ParseSyncBatches(envelope.Results)
+			if resErr == nil && len(resBatches) > 0 {
+				return resBatches, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("unrecognized sync/stream payload format: %s", string(data))
 }
 
 // ListSubscriptions calls POST /v1/subscriptions/list

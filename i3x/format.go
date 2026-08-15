@@ -635,94 +635,29 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 	}
 
 	dataBytes := []byte(event.Data)
-
-	// 1. Try flat array of SyncUpdateEntry: [{"elementId": "...", "value": ...}, ...]
-	var entries []SyncUpdateEntry
-	if err := json.Unmarshal(dataBytes, &entries); err == nil && len(entries) > 0 && entries[0].ElementID != "" {
-		for _, entry := range entries {
-			ts := entry.Timestamp
-			if ts == "" {
-				ts = FormatTimeRFC3339(time.Now())
-			}
-			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
-				f.color(colorDim, ts),
-				f.color(colorCyan+colorBold, entry.ElementID),
-				formatValue(entry.Value),
-				f.fmtQuality(entry.Quality))
-		}
-		return
-	}
-
-	// 2. Try array of SyncBatch: [{"sequenceNumber": 1, "updates": [...]}]
-	var batches []SyncBatch
-	if err := json.Unmarshal(dataBytes, &batches); err == nil && len(batches) > 0 && len(batches[0].Updates) > 0 {
+	batches, err := ParseSyncBatches(dataBytes)
+	if err == nil && len(batches) > 0 {
 		for _, b := range batches {
 			for _, u := range b.Updates {
 				ts := u.Timestamp
 				if ts == "" {
 					ts = FormatTimeRFC3339(time.Now())
 				}
-				fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
-					f.color(colorDim, ts),
-					b.SequenceNumber,
-					f.color(colorCyan+colorBold, u.ElementID),
-					formatValue(u.Value),
-					f.fmtQuality(u.Quality))
+				if b.SequenceNumber > 1 {
+					fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
+						f.color(colorDim, ts),
+						b.SequenceNumber,
+						f.color(colorCyan+colorBold, u.ElementID),
+						formatValue(u.Value),
+						f.fmtQuality(u.Quality))
+				} else {
+					fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
+						f.color(colorDim, ts),
+						f.color(colorCyan+colorBold, u.ElementID),
+						formatValue(u.Value),
+						f.fmtQuality(u.Quality))
+				}
 			}
-		}
-		return
-	}
-
-	// 3. Try single SyncBatch: {"sequenceNumber": 1, "updates": [...]}
-	var batch SyncBatch
-	if err := json.Unmarshal(dataBytes, &batch); err == nil && (len(batch.Updates) > 0 || batch.SequenceNumber > 0) {
-		for _, u := range batch.Updates {
-			ts := u.Timestamp
-			if ts == "" {
-				ts = FormatTimeRFC3339(time.Now())
-			}
-			fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
-				f.color(colorDim, ts),
-				batch.SequenceNumber,
-				f.color(colorCyan+colorBold, u.ElementID),
-				formatValue(u.Value),
-				f.fmtQuality(u.Quality))
-		}
-		return
-	}
-
-	// 4. Try single SyncUpdateEntry: {"elementId": "...", "value": ...}
-	var entry SyncUpdateEntry
-	if err := json.Unmarshal(dataBytes, &entry); err == nil && entry.ElementID != "" {
-		ts := entry.Timestamp
-		if ts == "" {
-			ts = FormatTimeRFC3339(time.Now())
-		}
-		fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
-			f.color(colorDim, ts),
-			f.color(colorCyan+colorBold, entry.ElementID),
-			formatValue(entry.Value),
-			f.fmtQuality(entry.Quality))
-		return
-	}
-
-	// 5. Try wrapper objects like {"updates": [...]} or {"result": [...]}
-	var wrapper struct {
-		Updates []SyncUpdateEntry `json:"updates"`
-		Result  any               `json:"result"`
-		Results []any             `json:"results"`
-	}
-	if err := json.Unmarshal(dataBytes, &wrapper); err == nil && len(wrapper.Updates) > 0 {
-		for _, u := range wrapper.Updates {
-			ts := u.Timestamp
-			if ts == "" {
-				ts = FormatTimeRFC3339(time.Now())
-			}
-			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
-				f.color(colorDim, ts),
-				f.color(colorCyan+colorBold, u.ElementID),
-				formatValue(u.Value),
-				f.fmtQuality(u.Quality))
 		}
 		return
 	}

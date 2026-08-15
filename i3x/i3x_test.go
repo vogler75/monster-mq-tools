@@ -850,4 +850,79 @@ func TestAllCommandHelpFlags(t *testing.T) {
 	}
 }
 
+func TestParseSyncBatchesFormats(t *testing.T) {
+	testCases := []struct {
+		name     string
+		json     string
+		expected int // expected total updates
+	}{
+		{
+			name:     "1. Direct array of sync batches",
+			json:     `[{"sequenceNumber": 1, "updates": [{"elementId": "p1", "value": 10}, {"elementId": "p2", "value": 20}]}]`,
+			expected: 2,
+		},
+		{
+			name:     "2. Direct flat array of updates (not batch array)",
+			json:     `[{"elementId": "p1", "value": 10, "quality": "Good"}, {"elementId": "p2", "value": 20, "quality": "Good"}]`,
+			expected: 2,
+		},
+		{
+			name:     "3. Direct single batch object (not array)",
+			json:     `{"sequenceNumber": 5, "updates": [{"elementId": "p1", "value": 42}]}`,
+			expected: 1,
+		},
+		{
+			name:     "4. Direct single update object (not array)",
+			json:     `{"elementId": "p1", "value": 100, "quality": "Good", "timestamp": "2026-08-15T12:00:00Z"}`,
+			expected: 1,
+		},
+		{
+			name:     "5. Wrapped envelope with single object result (not array)",
+			json:     `{"success": true, "result": {"elementId": "p1", "value": 55, "quality": "Good"}}`,
+			expected: 1,
+		},
+		{
+			name:     "6. Wrapped envelope with single batch result (not array)",
+			json:     `{"success": true, "result": {"sequenceNumber": 1, "updates": [{"elementId": "p1", "value": 60}]}}`,
+			expected: 1,
+		},
+		{
+			name:     "7. Wrapped envelope with flat array result",
+			json:     `{"success": true, "result": [{"elementId": "p1", "value": 70}]}`,
+			expected: 1,
+		},
+		{
+			name:     "8. Wrapped envelope with batch array result",
+			json:     `{"success": true, "result": [{"sequenceNumber": 1, "updates": [{"elementId": "p1", "value": 80}]}]}`,
+			expected: 1,
+		},
+		{
+			name:     "9. Wrapped envelope with updates field",
+			json:     `{"success": true, "updates": [{"elementId": "p1", "value": 90}]}`,
+			expected: 1,
+		},
+		{
+			name:     "10. Wrapped envelope with bulk results array",
+			json:     `{"success": true, "results": [{"success": true, "result": {"elementId": "p1", "value": 99}}]}`,
+			expected: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			batches, err := ParseSyncBatches([]byte(tc.json))
+			if err != nil {
+				t.Fatalf("ParseSyncBatches failed: %v", err)
+			}
+			totalUpdates := 0
+			for _, b := range batches {
+				totalUpdates += len(b.Updates)
+			}
+			if totalUpdates != tc.expected {
+				t.Errorf("expected %d updates, got %d", tc.expected, totalUpdates)
+			}
+		})
+	}
+}
+
 
