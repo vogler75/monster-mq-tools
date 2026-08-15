@@ -13,6 +13,7 @@ This repository provides command-line tools and utilities designed to simplify a
 | Directory | Tool | Description | Supported Brokers |
 | :--- | :--- | :--- | :--- |
 | [`/cli`](cli) | **MonsterMQ CLI (`mmq`)** | Go interactive REPL shell and command-line interface for GraphQL operations, real-time message publishing/subscribing, topic discovery, historical/TSDB metric querying, and device/client management. | Full Broker & Edge Broker |
+| [`/i3x`](i3x) | **i3X CLI (`i3x`)** | Go interactive REPL shell and command-line tool for i3X 1.0 API specification (Industrial Information Interface eXchange), exploring namespaces/types/objects, querying/writing values, historical telemetry, and SSE live subscriptions. | i3X 1.0 Compliant Brokers & Servers |
 | [`/hmi`](hmi) | **Edge HMI Dashboards** | Standalone web HMIs and industrial dashboard applications hosted and served directly by MonsterMQ Edge brokers. | Edge Broker |
 
 ---
@@ -78,6 +79,7 @@ For full CLI documentation, global flags, environment configuration, and detaile
 
 This repository includes pre-packaged agent instructions and skills located under [`.agents/skills/`](.agents/skills/):
 - **[`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)**: Operational guide and CLI reference for `mmq`.
+- **[`monstermq-i3x`](.agents/skills/monstermq-i3x/SKILL.md)**: Operational guide and CLI reference for `i3x`.
 - **[`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)**: Architecture patterns and guidelines for creating HTML/JS HMI screens and industrial dashboards hosted by MonsterMQ Edge.
 - **[`monstermq-graphql`](.agents/skills/monstermq-graphql/SKILL.md)**: Data GraphQL API guide for querying topic values, publishing messages, inspecting archive groups, history data, time-series aggregations, and WebSockets.
 
