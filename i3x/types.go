@@ -143,12 +143,13 @@ type CreateSubscriptionResponse struct {
 	DisplayName    *string `json:"displayName,omitempty"`
 }
 
-// SyncUpdateEntry models a single update inside a SyncBatch.
+// SyncUpdateEntry models a single update entry in streaming and sync operations.
 type SyncUpdateEntry struct {
-	ElementID string      `json:"elementId"`
-	Value     interface{} `json:"value"`
-	Quality   string      `json:"quality"`
-	Timestamp string      `json:"timestamp"`
+	SequenceNumber *int        `json:"sequenceNumber,omitempty"`
+	ElementID      string      `json:"elementId"`
+	Value          interface{} `json:"value"`
+	Quality        string      `json:"quality"`
+	Timestamp      string      `json:"timestamp"`
 }
 
 // SyncBatch models a batch of updates in syncSubscription.

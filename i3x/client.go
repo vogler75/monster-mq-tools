@@ -477,28 +477,36 @@ func ParseSyncBatches(data []byte) ([]SyncBatch, error) {
 		return nil, nil
 	}
 
-	// 1. Direct array of SyncBatch: [{"sequenceNumber": 1, "updates": [...]}]
+	// 1. Direct single SyncUpdateEntry object (e.g. {"sequenceNumber": 11, "elementId": "...", "value": ...})
+	var entry SyncUpdateEntry
+	if err := json.Unmarshal(data, &entry); err == nil && entry.ElementID != "" {
+		seq := 1
+		if entry.SequenceNumber != nil {
+			seq = *entry.SequenceNumber
+		}
+		return []SyncBatch{{SequenceNumber: seq, Updates: []SyncUpdateEntry{entry}}}, nil
+	}
+
+	// 2. Direct flat array of SyncUpdateEntry: [{"elementId": "...", "value": ...}, ...]
+	var entries []SyncUpdateEntry
+	if err := json.Unmarshal(data, &entries); err == nil && len(entries) > 0 && entries[0].ElementID != "" {
+		seq := 1
+		if entries[0].SequenceNumber != nil {
+			seq = *entries[0].SequenceNumber
+		}
+		return []SyncBatch{{SequenceNumber: seq, Updates: entries}}, nil
+	}
+
+	// 3. Direct array of SyncBatch: [{"sequenceNumber": 1, "updates": [...]}]
 	var batches []SyncBatch
 	if err := json.Unmarshal(data, &batches); err == nil && len(batches) > 0 && len(batches[0].Updates) > 0 {
 		return batches, nil
 	}
 
-	// 2. Direct flat array of SyncUpdateEntry: [{"elementId": "...", "value": ...}]
-	var entries []SyncUpdateEntry
-	if err := json.Unmarshal(data, &entries); err == nil && len(entries) > 0 && entries[0].ElementID != "" {
-		return []SyncBatch{{SequenceNumber: 1, Updates: entries}}, nil
-	}
-
-	// 3. Direct single SyncBatch object: {"sequenceNumber": 1, "updates": [...]}
+	// 4. Direct single SyncBatch object: {"sequenceNumber": 1, "updates": [...]}
 	var batch SyncBatch
-	if err := json.Unmarshal(data, &batch); err == nil && (len(batch.Updates) > 0 || batch.SequenceNumber > 0) {
+	if err := json.Unmarshal(data, &batch); err == nil && len(batch.Updates) > 0 {
 		return []SyncBatch{batch}, nil
-	}
-
-	// 4. Direct single SyncUpdateEntry object: {"elementId": "...", "value": ...}
-	var entry SyncUpdateEntry
-	if err := json.Unmarshal(data, &entry); err == nil && entry.ElementID != "" {
-		return []SyncBatch{{SequenceNumber: 1, Updates: []SyncUpdateEntry{entry}}}, nil
 	}
 
 	// 5. Envelope inspection (e.g. {"success": true, "result": ...} or {"results": [...]})

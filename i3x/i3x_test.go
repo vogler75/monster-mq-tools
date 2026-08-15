@@ -906,6 +906,11 @@ func TestParseSyncBatchesFormats(t *testing.T) {
 			json:     `{"success": true, "results": [{"success": true, "result": {"elementId": "p1", "value": 99}}]}`,
 			expected: 1,
 		},
+		{
+			name:     "11. Direct SCADA update object with sequenceNumber and Value map",
+			json:     `{"sequenceNumber":11,"elementId":"scada/Original/Meter_Output/WattAct","value":{"TimeMS":1.786788894012E12,"Value":2754.399387911247,"Tags":{}},"quality":"Good","timestamp":"2026-08-15T10:14:54.084665Z"}`,
+			expected: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -922,6 +927,18 @@ func TestParseSyncBatchesFormats(t *testing.T) {
 				t.Errorf("expected %d updates, got %d", tc.expected, totalUpdates)
 			}
 		})
+	}
+
+	// Verify PrintLiveStreamEvent output for SCADA payload
+	var buf bytes.Buffer
+	f := NewFormatter(FormatTable, false)
+	f.Out = &buf
+	f.PrintLiveStreamEvent(SSEEvent{
+		Data: `{"sequenceNumber":11,"elementId":"scada/Original/Meter_Output/WattAct","value":{"TimeMS":1.786788894012E12,"Value":2754.399387911247,"Tags":{}},"quality":"Good","timestamp":"2026-08-15T10:14:54.084665Z"}`,
+	})
+	output := buf.String()
+	if !strings.Contains(output, "scada/Original/Meter_Output/WattAct") || !strings.Contains(output, "2754.399387911247") || !strings.Contains(output, "#11") {
+		t.Fatalf("unexpected stream formatting output: %s", output)
 	}
 }
 

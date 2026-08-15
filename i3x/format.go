@@ -643,10 +643,14 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 				if ts == "" {
 					ts = FormatTimeRFC3339(time.Now())
 				}
-				if b.SequenceNumber > 1 {
+				seq := b.SequenceNumber
+				if u.SequenceNumber != nil {
+					seq = *u.SequenceNumber
+				}
+				if seq > 0 {
 					fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
 						f.color(colorDim, ts),
-						b.SequenceNumber,
+						seq,
 						f.color(colorCyan+colorBold, u.ElementID),
 						formatValue(u.Value),
 						f.fmtQuality(u.Quality))
@@ -705,6 +709,22 @@ func formatValue(v interface{}) string {
 		return fmt.Sprintf("%v", val)
 	case bool:
 		return fmt.Sprintf("%v", val)
+	case map[string]interface{}:
+		// If map contains an inner "Value" or "val" field, extract and format it cleanly
+		for _, key := range []string{"Value", "value", "val", "Val", "v", "V"} {
+			if innerVal, exists := val[key]; exists && innerVal != nil {
+				switch iv := innerVal.(type) {
+				case float64:
+					return fmt.Sprintf("%v", iv)
+				case string:
+					return fmt.Sprintf("%q", iv)
+				case bool:
+					return fmt.Sprintf("%v", iv)
+				}
+			}
+		}
+		b, _ := json.Marshal(val)
+		return string(b)
 	default:
 		b, _ := json.Marshal(val)
 		return string(b)
