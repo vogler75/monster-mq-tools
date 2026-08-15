@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // CommandHandler dispatches CLI and REPL commands.
@@ -1153,15 +1155,28 @@ func (h *CommandHandler) CmdSubStream(ctx context.Context, args []string) error 
 		}
 	}
 
-	fmt.Fprintf(h.formatter.Out, "%s (SubID: %s, ClientID: %s)... Press Ctrl+C to stop.\n",
+	streamCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	restoreTerm := setupKeyboardInterrupt(streamCtx, cancel)
+	defer restoreTerm()
+
+	fmt.Fprintf(h.formatter.Out, "%s (SubID: %s, ClientID: %s)... Press 'q', ESC, Enter, or Ctrl+C to stop.\r\n",
 		h.formatter.color(colorGreen+colorBold, "Connecting to SSE stream"),
 		h.formatter.color(colorCyan, subID),
 		clientID)
 
-	return h.client.StreamSubscription(ctx, clientID, subID, func(event SSEEvent) error {
+	err := h.client.StreamSubscription(streamCtx, clientID, subID, func(event SSEEvent) error {
 		h.formatter.PrintLiveStreamEvent(event)
 		return nil
 	})
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(h.formatter.Out, "%s Stream ended: %v\r\n", h.formatter.color(colorRed, "•"), err)
+	} else {
+		fmt.Fprintf(h.formatter.Out, "\r\n%s Stream stopped.\r\n", h.formatter.color(colorYellow, "•"))
+	}
+	return nil
 }
 
 func (h *CommandHandler) CmdSubDelete(ctx context.Context, args []string) error {
@@ -1266,7 +1281,7 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 		clientID = defaultClientID()
 	}
 
-	fmt.Fprintf(h.formatter.Out, "%s Creating subscription for %d element(s)...\n",
+	fmt.Fprintf(h.formatter.Out, "%s Creating subscription for %d element(s)...\r\n",
 		h.formatter.color(colorYellow, "•"), len(elementIDs))
 
 	subResp, err := h.client.CreateSubscription(ctx, clientID, name)
@@ -1278,22 +1293,10 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 		clientID = subResp.ClientID
 	}
 
-	// Setup cleanup on exit / interrupt
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cleanupCancel()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		fmt.Fprintf(h.formatter.Out, "\n%s Cleaning up subscription %s...\n",
-			h.formatter.color(colorYellow, "•"), subID)
-		_, _ = h.client.DeleteSubscriptions(cleanupCtx, clientID, []string{subID})
-		os.Exit(0)
-	}()
-
+	// Always clean up subscription on exit / return
 	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
 		_, _ = h.client.DeleteSubscriptions(cleanupCtx, clientID, []string{subID})
 	}()
 
@@ -1317,7 +1320,7 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 			if item.ResponseDetail != nil {
 				errDetail = ": " + item.ResponseDetail.Error()
 			}
-			fmt.Fprintf(h.formatter.Out, "%s Failed to register %s%s\n", h.formatter.color(colorRed, "✗"), id, errDetail)
+			fmt.Fprintf(h.formatter.Out, "%s Failed to register %s%s\r\n", h.formatter.color(colorRed, "✗"), id, errDetail)
 		} else {
 			registeredCount++
 		}
@@ -1343,7 +1346,7 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 					if ts == "" {
 						ts = FormatTimeRFC3339(time.Now())
 					}
-					fmt.Fprintf(h.formatter.Out, "[%s] %s %s = %s (%s)\n",
+					fmt.Fprintf(h.formatter.Out, "[%s] %s %s = %s (%s)\r\n",
 						h.formatter.color(colorDim, ts),
 						h.formatter.color(colorYellow, "[INITIAL]"),
 						h.formatter.color(colorCyan+colorBold, id),
@@ -1352,14 +1355,20 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 				}
 			}
 			if !hasValue {
-				fmt.Fprintln(h.formatter.Out, h.formatter.color(colorDim, "• No initial value recorded on server yet."))
+				fmt.Fprintf(h.formatter.Out, "%s\r\n", h.formatter.color(colorDim, "• No initial value recorded on server yet."))
 			}
 		}
 	}
 
+	watchCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	restoreTerm := setupKeyboardInterrupt(watchCtx, cancel)
+	defer restoreTerm()
+
 	// Polling mode fallback
 	if pollInterval > 0 {
-		fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s, Interval: %v)... Press Ctrl+C to exit.\n",
+		fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s, Interval: %v)... Press 'q', ESC, Enter, or Ctrl+C to stop.\r\n",
 			h.formatter.color(colorGreen, "✓"),
 			h.formatter.color(colorBold, "Polling subscription updates via sync"),
 			h.formatter.color(colorCyan, subID),
@@ -1371,18 +1380,22 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 
 		for {
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
+			case <-watchCtx.Done():
+				fmt.Fprintf(h.formatter.Out, "\r\n%s Watch stopped. Cleaned up subscription %s.\r\n",
+					h.formatter.color(colorYellow, "•"), subID)
+				return nil
 			case <-ticker.C:
-				batches, syncErr := h.client.SyncSubscription(ctx, clientID, subID, lastSeq)
+				batches, syncErr := h.client.SyncSubscription(watchCtx, clientID, subID, lastSeq)
 				if syncErr != nil {
-					fmt.Fprintf(h.formatter.Out, "%s Sync error: %v\n", h.formatter.color(colorRed, "✗"), syncErr)
+					if !errors.Is(syncErr, context.Canceled) {
+						fmt.Fprintf(h.formatter.Out, "%s Sync error: %v\r\n", h.formatter.color(colorRed, "✗"), syncErr)
+					}
 					continue
 				}
 				for _, b := range batches {
 					lastSeq = &b.SequenceNumber
 					for _, u := range b.Updates {
-						fmt.Fprintf(h.formatter.Out, "[%s] #%d %s = %s (%s)\n",
+						fmt.Fprintf(h.formatter.Out, "[%s] #%d %s = %s (%s)\r\n",
 							h.formatter.color(colorDim, u.Timestamp),
 							b.SequenceNumber,
 							h.formatter.color(colorCyan+colorBold, u.ElementID),
@@ -1395,20 +1408,61 @@ func (h *CommandHandler) CmdWatch(ctx context.Context, args []string) error {
 	}
 
 	// SSE Streaming mode
-	fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s)... Press Ctrl+C to exit.\n",
+	fmt.Fprintf(h.formatter.Out, "%s %s (SubID: %s)... Press 'q', ESC, Enter, or Ctrl+C to stop.\r\n",
 		h.formatter.color(colorGreen, "✓"),
 		h.formatter.color(colorBold, "Streaming real-time updates via SSE"),
 		h.formatter.color(colorCyan, subID))
 
-	err = h.client.StreamSubscription(ctx, clientID, subID, func(event SSEEvent) error {
+	err = h.client.StreamSubscription(watchCtx, clientID, subID, func(event SSEEvent) error {
 		h.formatter.PrintLiveStreamEvent(event)
 		return nil
 	})
-	if err != nil {
-		fmt.Fprintf(h.formatter.Out, "%s Stream ended: %v\n", h.formatter.color(colorRed, "•"), err)
-		return err
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintf(h.formatter.Out, "%s Stream ended: %v\r\n", h.formatter.color(colorRed, "•"), err)
+	} else {
+		fmt.Fprintf(h.formatter.Out, "\r\n%s Watch stopped. Cleaned up subscription %s.\r\n",
+			h.formatter.color(colorYellow, "•"), subID)
 	}
 	return nil
+}
+
+// setupKeyboardInterrupt configures raw terminal mode and listens for stop keys ('q', 'Q', ESC, Enter, Ctrl+C, Ctrl+D).
+func setupKeyboardInterrupt(ctx context.Context, cancel context.CancelFunc) func() {
+	stdinFd := int(os.Stdin.Fd())
+	if !term.IsTerminal(stdinFd) {
+		return func() {}
+	}
+
+	oldState, err := term.MakeRaw(stdinFd)
+	if err != nil {
+		return func() {}
+	}
+
+	go func() {
+		buf := make([]byte, 16)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				n, readErr := os.Stdin.Read(buf)
+				if readErr != nil || n == 0 {
+					return
+				}
+				b := buf[0]
+				// 'q', 'Q', ESC (0x1b), Ctrl+C (0x03), Enter ('\r' or '\n'), Ctrl+D (0x04)
+				if b == 'q' || b == 'Q' || b == 0x1b || b == 0x03 || b == '\r' || b == '\n' || b == 0x04 {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
+	return func() {
+		_ = term.Restore(stdinFd, oldState)
+	}
 }
 
 // Helper to parse relative duration (e.g. -1h, -15m, 1h ago) or RFC3339 timestamps

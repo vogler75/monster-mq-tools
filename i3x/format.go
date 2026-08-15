@@ -630,7 +630,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 	}
 
 	if f.Format == FormatJSON || f.Format == FormatRaw {
-		fmt.Fprintln(f.Out, event.Data)
+		fmt.Fprintf(f.Out, "%s\r\n", event.Data)
 		return
 	}
 
@@ -644,7 +644,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 			if ts == "" {
 				ts = FormatTimeRFC3339(time.Now())
 			}
-			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\n",
+			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
 				f.color(colorDim, ts),
 				f.color(colorCyan+colorBold, entry.ElementID),
 				formatValue(entry.Value),
@@ -662,7 +662,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 				if ts == "" {
 					ts = FormatTimeRFC3339(time.Now())
 				}
-				fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\n",
+				fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
 					f.color(colorDim, ts),
 					b.SequenceNumber,
 					f.color(colorCyan+colorBold, u.ElementID),
@@ -681,7 +681,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 			if ts == "" {
 				ts = FormatTimeRFC3339(time.Now())
 			}
-			fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\n",
+			fmt.Fprintf(f.Out, "[%s] #%d %s = %s (%s)\r\n",
 				f.color(colorDim, ts),
 				batch.SequenceNumber,
 				f.color(colorCyan+colorBold, u.ElementID),
@@ -698,7 +698,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 		if ts == "" {
 			ts = FormatTimeRFC3339(time.Now())
 		}
-		fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\n",
+		fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
 			f.color(colorDim, ts),
 			f.color(colorCyan+colorBold, entry.ElementID),
 			formatValue(entry.Value),
@@ -718,7 +718,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 			if ts == "" {
 				ts = FormatTimeRFC3339(time.Now())
 			}
-			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\n",
+			fmt.Fprintf(f.Out, "[%s] %s = %s (%s)\r\n",
 				f.color(colorDim, ts),
 				f.color(colorCyan+colorBold, u.ElementID),
 				formatValue(u.Value),
@@ -732,7 +732,7 @@ func (f *Formatter) PrintLiveStreamEvent(event SSEEvent) {
 	if label == "" {
 		label = "data"
 	}
-	fmt.Fprintf(f.Out, "[SSE %s] %s\n", f.color(colorYellow, label), event.Data)
+	fmt.Fprintf(f.Out, "[SSE %s] %s\r\n", f.color(colorYellow, label), event.Data)
 }
 
 func (f *Formatter) fmtBool(b bool) string {
