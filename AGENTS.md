@@ -7,7 +7,9 @@ Welcome! This repository contains tools, utilities, and applications for Monster
 ## Repository Structure
 
 - [`cli/`](cli): The official Go command-line tool `mmq` (MonsterMQ CLI) for MonsterMQ GraphQL interfaces.
+- [`i3x/`](i3x): The official Go command-line tool `i3x` (i3X CLI) for the i3X 1.0 REST API specification.
 - [`monstermq-cli`](.agents/skills/monstermq-cli/SKILL.md)
+- [`monstermq-i3x`](.agents/skills/monstermq-i3x/SKILL.md)
 - [`monstermq-hmi-builder`](.agents/skills/monstermq-hmi-builder/SKILL.md)
 - [`monstermq-graphql`](.agents/skills/monstermq-graphql/SKILL.md)
 

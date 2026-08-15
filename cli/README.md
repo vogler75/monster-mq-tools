@@ -198,15 +198,19 @@ mmq --port 4001 currentValue sensors/temp/room1
 ```
 
 #### `publish`
-Publish a message payload to a topic with optional retain and QoS flags.
+Publish a message payload to a topic with optional retain and QoS flags. If payload is omitted, an empty message (`""`) is published (useful for clearing retained topics or triggering events).
 
 ```bash
-mmq publish <topic> <payload> [--retain] [--qos 0|1|2]
+mmq publish <topic> [payload] [--retain] [--qos 0|1|2]
 ```
 
-*Example:*
+*Examples:*
 ```bash
+# Publish JSON telemetry:
 mmq publish sensors/temp/room1 '{"temp": 22.5, "unit": "C"}' --retain --qos 1
+
+# Clear a retained topic by publishing an empty payload:
+mmq publish sensors/temp/room1 --retain
 ```
 
 #### `subscribe`

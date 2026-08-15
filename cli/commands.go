@@ -216,14 +216,15 @@ func runGetValue(ctx context.Context, client *Client, args []string) error {
 }
 
 func runSetValue(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 2 || hasHelpFlag(args) {
-		fmt.Println("Usage: mmq publish <topic> <payload> [options]")
+	if len(args) < 1 || hasHelpFlag(args) {
+		fmt.Println("Usage: mmq publish <topic> [payload] [options]")
 		fmt.Println()
 		fmt.Println("Publish a message payload to a topic.")
+		fmt.Println("If payload is omitted, an empty message (\"\") is published (useful for clearing retained topics or triggering events).")
 		fmt.Println()
 		fmt.Println("Arguments:")
 		fmt.Println("  <topic>             Topic name (required)")
-		fmt.Println("  <payload>           Message payload string or JSON (required)")
+		fmt.Println("  [payload]           Message payload string or JSON (default: \"\")")
 		fmt.Println()
 		fmt.Println("Options:")
 		fmt.Println("  --retain, -r        Publish as retained message (default: false)")
@@ -231,21 +232,33 @@ func runSetValue(ctx context.Context, client *Client, args []string) error {
 		fmt.Println("  -h, --help          Show this help text")
 		return nil
 	}
-	topic := args[0]
-	payload := args[1]
+
+	var topic string
+	payload := ""
 	retain := false
 	qos := 0
+	var posArgs []string
 
-	for i := 2; i < len(args); i++ {
-		switch args[i] {
-		case "--retain":
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--retain" || arg == "-r":
 			retain = true
-		case "--qos":
-			if i+1 < len(args) {
-				qos, _ = strconv.Atoi(args[i+1])
-				i++
-			}
+		case (arg == "--qos" || arg == "-q") && i+1 < len(args):
+			qos, _ = strconv.Atoi(args[i+1])
+			i++
+		case !strings.HasPrefix(arg, "-"):
+			posArgs = append(posArgs, arg)
 		}
+	}
+
+	if len(posArgs) < 1 {
+		return fmt.Errorf("missing topic name")
+	}
+
+	topic = posArgs[0]
+	if len(posArgs) > 1 {
+		payload = posArgs[1]
 	}
 
 	query := `

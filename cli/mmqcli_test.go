@@ -456,11 +456,29 @@ func TestRunSetValue(t *testing.T) {
 	if capturedVars["topic"] != "sensors/temp" {
 		t.Errorf("expected topic sensors/temp, got %v", capturedVars["topic"])
 	}
+	if capturedVars["payload"] != `{"val": 25.5}` {
+		t.Errorf("expected payload, got %v", capturedVars["payload"])
+	}
 	if capturedVars["retained"] != true {
 		t.Errorf("expected retained true, got %v", capturedVars["retained"])
 	}
 	if capturedVars["qos"] != float64(1) {
 		t.Errorf("expected qos 1, got %v", capturedVars["qos"])
+	}
+
+	// Test publishing with omitted payload (empty message)
+	err = runSetValue(ctx, client, []string{"sensors/clear_retained", "--retain"})
+	if err != nil {
+		t.Fatalf("runSetValue with omitted payload failed: %v", err)
+	}
+	if capturedVars["topic"] != "sensors/clear_retained" {
+		t.Errorf("expected topic sensors/clear_retained, got %v", capturedVars["topic"])
+	}
+	if capturedVars["payload"] != "" {
+		t.Errorf("expected empty payload \"\", got %v", capturedVars["payload"])
+	}
+	if capturedVars["retained"] != true {
+		t.Errorf("expected retained true, got %v", capturedVars["retained"])
 	}
 }
 

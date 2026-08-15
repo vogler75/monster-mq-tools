@@ -258,7 +258,7 @@ Broker & Topic Operations:
   currentValues <filter>                      Get current values matching a topic filter
   retainedMessages [filter]                   List retained messages matching a topic filter
   browseTopics [path]                         Browse topic hierarchy level-by-level
-  publish <topic> <payload>                   Publish payload (--retain, --qos 0|1|2)
+  publish <topic> [payload]                   Publish payload (--retain, --qos 0|1|2)
   subscribe <topics...>                       Subscribe to real-time topic updates via WebSocket
   monitor <topics...>                         Interactive live dashboard monitor for topic updates
   archivedMessages <topic>                    Query historical time-series messages
