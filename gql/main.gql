@@ -259,6 +259,8 @@ type ArchiveGroupInfo {
   queueDiskPath: String
   createdAt: String
   updatedAt: String
+  lastValReadOnly: Boolean!
+  archiveReadOnly: Boolean!
 
   """ Database connection status from all nodes in the cluster"""
   connectionStatus: [NodeConnectionStatus!]!
@@ -464,34 +466,13 @@ type BrokerConfig {
   userManagementEnabled: Boolean!
   anonymousEnabled: Boolean!
 
-  """ Extensions"""
-  mcpEnabled: Boolean!
-  mcpPort: Int!
-  prometheusEnabled: Boolean!
-  prometheusPort: Int!
-  i3xEnabled: Boolean!
-  i3xPort: Int!
-
-  """ GraphQL / HTTP API"""
-  graphqlEnabled: Boolean!
-  graphqlPort: Int!
-
-  """ Metrics"""
-  metricsEnabled: Boolean!
-
-  """ HMI"""
-  hmiEnabled: Boolean!
-
-  """ GenAI"""
-  genAiEnabled: Boolean!
-  genAiProvider: String!
-  genAiModel: String!
-
   """ Database connections (passwords omitted)"""
   postgresUrl: String!
   postgresUser: String!
   crateDbUrl: String!
   crateDbUser: String!
+  questDbUrl: String!
+  questDbUser: String!
   mongoDbUrl: String!
   mongoDbDatabase: String!
   sqlitePath: String!
@@ -727,6 +708,8 @@ input CreateArchiveGroupInput {
   bulkSize: Int = 4000
   bulkTimeoutMs: Long = 250
   queueDiskPath: String = "data/queue"
+  lastValReadOnly: Boolean = false
+  archiveReadOnly: Boolean = false
 }
 
 input CreateDatabaseConnectionInput {
@@ -788,6 +771,8 @@ enum DatabaseConnectionType {
   POSTGRES
   MONGODB
   SQLITE
+  CRATEDB
+  QUESTDB
 }
 
 """
@@ -1247,6 +1232,251 @@ type HmiResult {
   hmi: Hmi
   success: Boolean!
   message: String
+}
+
+""" i3X object address mapping to local MQTT topic"""
+type I3xAddress {
+  """ i3X object element ID or path prefix (e.g., "factory/line1/motor1" or "sensors")
+  """
+  elementId: String!
+
+  """ Local MQTT destination topic or prefix"""
+  topic: String!
+
+  """ Hierarchy depth: 1 = single element, 0 = unlimited / recursive subtree, N = depth limit
+  """
+  maxDepth: Int!
+
+  """ Publish MQTT messages with retained flag"""
+  retained: Boolean!
+
+  """ MQTT QoS level (0, 1, or 2)"""
+  qos: Int!
+
+  """ Format of published message payload"""
+  messageFormat: I3xMessageFormat!
+
+  """ Remove base elementId prefix when mapping child topics in recursive subscriptions
+  """
+  removePath: Boolean!
+
+  """ Optional description"""
+  description: String!
+}
+
+input I3xAddressInput {
+  """ i3X object element ID or path prefix (e.g., "factory/line1/motor1" or "sensors")
+  """
+  elementId: String!
+
+  """ Local MQTT destination topic or prefix"""
+  topic: String!
+
+  """ Hierarchy depth: 1 = single element, 0 = unlimited / recursive subtree, N = depth limit
+  """
+  maxDepth: Int = 1
+
+  """ Publish MQTT messages with retained flag"""
+  retained: Boolean = false
+
+  """ MQTT QoS level (0, 1, or 2)"""
+  qos: Int = 0
+
+  """ Format of published message payload"""
+  messageFormat: I3xMessageFormat = RAW_VALUE
+
+  """ Remove base elementId prefix when mapping child topics in recursive subscriptions
+  """
+  removePath: Boolean = false
+
+  """ Optional description"""
+  description: String = ""
+}
+
+"""i3X Auth Type"""
+enum I3xAuthType {
+  NONE
+  BASIC
+  BEARER
+  CUSTOM_HEADERS
+}
+
+type I3xClient {
+  """ Unique client name across the cluster"""
+  name: String!
+
+  """ MQTT namespace for internal communication"""
+  namespace: String!
+
+  """ Cluster node ID where this client runs"""
+  nodeId: String!
+
+  """ Connection and subscription configuration"""
+  config: I3xConnectionConfig!
+
+  """ Whether this client is enabled and should connect"""
+  enabled: Boolean!
+
+  """ Client creation timestamp"""
+  createdAt: String!
+
+  """ Client last update timestamp"""
+  updatedAt: String!
+
+  """ Whether this client is running on the current node"""
+  isOnCurrentNode: Boolean!
+
+  """ Current metrics for this i3X client (single most recent entry)"""
+  metrics: [I3xClientMetrics!]!
+
+  """ Historical metrics data for this i3X client"""
+  metricsHistory(from: String, to: String, lastMinutes: Int): [I3xClientMetrics!]!
+}
+
+input I3xClientInput {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean = true
+  config: I3xConnectionConfigInput!
+}
+
+type I3xClientMetrics {
+  """ Messages per second received from i3X server"""
+  messagesIn: Float!
+
+  """ Connection status to i3X server"""
+  connected: Boolean!
+
+  """ ISO 8601 timestamp when these metrics were captured"""
+  timestamp: String!
+}
+
+"""
+############################################
+ i3X Client Mutations                      #
+############################################
+"""
+type I3xClientMutations {
+  """ Create a new i3X client bridge"""
+  create(input: I3xClientInput!): I3xClientResult!
+
+  """ Update an existing i3X client bridge configuration"""
+  update(name: String!, input: I3xClientInput!): I3xClientResult!
+
+  """ Delete an i3X client bridge permanently"""
+  delete(name: String!): Boolean!
+
+  """ Start (enable) an i3X client bridge"""
+  start(name: String!): I3xClientResult!
+
+  """ Stop (disable) an i3X client bridge"""
+  stop(name: String!): I3xClientResult!
+
+  """ Toggle the enabled state of an i3X client bridge"""
+  toggle(name: String!, enabled: Boolean!): I3xClientResult!
+
+  """ Reassign an i3X client bridge to a different cluster node"""
+  reassign(name: String!, nodeId: String!): I3xClientResult!
+
+  """ Add an address entry (elementId to MQTT topic mapping)"""
+  addAddress(deviceName: String!, input: I3xAddressInput!): I3xClientResult!
+
+  """ Update an existing address entry by elementId"""
+  updateAddress(deviceName: String!, elementId: String!, input: I3xAddressInput!): I3xClientResult!
+
+  """ Delete an address entry by elementId"""
+  deleteAddress(deviceName: String!, elementId: String!): I3xClientResult!
+}
+
+type I3xClientResult {
+  success: Boolean!
+  client: I3xClient
+  errors: [String!]!
+}
+
+""" i3X Client connection configuration"""
+type I3xConnectionConfig {
+  """ Full i3X server URL (e.g., "http://localhost:3002/i3x/v1")"""
+  url: String!
+
+  """ Authentication type"""
+  authType: I3xAuthType!
+
+  """ Username for Basic auth"""
+  username: String
+
+  """ Password for Basic auth"""
+  password: String
+
+  """ Bearer token"""
+  token: String
+
+  """ Custom HTTP headers"""
+  headers: [I3xHeader!]!
+
+  """ Client ID used for i3X subscription"""
+  clientId: String!
+
+  """ Delay between reconnection attempts in milliseconds"""
+  reconnectDelay: Long!
+
+  """ Connection timeout in milliseconds"""
+  connectionTimeout: Long!
+
+  """ Configured object subscriptions"""
+  addresses: [I3xAddress!]!
+}
+
+input I3xConnectionConfigInput {
+  """ Full i3X server URL (e.g., "http://localhost:3002/i3x/v1")"""
+  url: String!
+
+  """ Authentication type"""
+  authType: I3xAuthType = NONE
+
+  """ Username for Basic auth"""
+  username: String
+
+  """ Password for Basic auth (leave blank to keep existing)"""
+  password: String
+
+  """ Bearer token (leave blank to keep existing)"""
+  token: String
+
+  """ Custom HTTP headers"""
+  headers: [I3xHeaderInput!] = []
+
+  """ Client ID used for i3X subscription"""
+  clientId: String = "monstermq-i3x-client"
+
+  """ Delay between reconnection attempts in milliseconds"""
+  reconnectDelay: Long = 5000
+
+  """ Connection timeout in milliseconds"""
+  connectionTimeout: Long = 10000
+
+  """ Configured object subscriptions"""
+  addresses: [I3xAddressInput!] = []
+}
+
+""" Custom HTTP Header for i3X requests"""
+type I3xHeader {
+  key: String!
+  value: String!
+}
+
+input I3xHeaderInput {
+  key: String!
+  value: String!
+}
+
+"""i3X Message Format"""
+enum I3xMessageFormat {
+  RAW_VALUE
+  JSON_ISO
+  JSON_MS
+  VQT
 }
 
 """ Result type for Device Configuration Import"""
@@ -2017,6 +2247,7 @@ enum MessageArchiveType {
   NONE
   POSTGRES
   CRATEDB
+  QUESTDB
   MONGODB
   SQLITE
 }
@@ -2623,6 +2854,9 @@ type Mutation {
 
   """ Access Telegram bot client management operations"""
   telegramClient: TelegramClientMutations!
+
+  """ Access i3X client bridge management operations"""
+  i3xClient: I3xClientMutations!
   flow: FlowMutations
   influxdbLogger: InfluxDBLoggerMutations!
   timebaseLogger: TimeBaseLoggerMutations!
@@ -4780,6 +5014,18 @@ type Query {
     """ Filter by cluster node ID (optional)"""
     node: String
   ): [TelegramClient!]!
+
+  """
+   Get i3X client bridge configurations across the entire cluster
+   Returns clients from all cluster nodes, showing their assignment and connection status
+  """
+  i3xClients(
+    """ Filter by specific client name (optional)"""
+    name: String
+
+    """ Filter by cluster node ID (optional)"""
+    node: String
+  ): [I3xClient!]!
   opcuaServers: [OPCUAServer!]!
   opcuaNodeBrowse(serverId: String!, nodeId: String!): [OPCUANode!]!
   opcuaNodeRead(serverId: String!, nodeId: String!): OPCUANodeDetail!
@@ -6020,6 +6266,8 @@ input UpdateArchiveGroupInput {
   bulkSize: Int
   bulkTimeoutMs: Long
   queueDiskPath: String
+  lastValReadOnly: Boolean
+  archiveReadOnly: Boolean
 }
 
 input UpdateDatabaseConnectionInput {
@@ -6784,6 +7032,9 @@ enum WinCCUaMessageFormat {
 
   """ Raw value only (no timestamp)"""
   RAW_VALUE
+
+  """ Raw JSON from WinCC (1:1)"""
+  RAW_JSON
 }
 
 """ Topic name transformation configuration"""

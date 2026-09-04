@@ -90,6 +90,8 @@ type ArchiveGroupInfo {
   queueDiskPath: String
   createdAt: String
   updatedAt: String
+  lastValReadOnly: Boolean!
+  archiveReadOnly: Boolean!
   connectionStatus: [NodeConnectionStatus!]!
   metrics: [ArchiveGroupMetrics!]!
   metricsHistory(from: String, to: String, lastMinutes: Int): [ArchiveGroupMetrics!]!
@@ -150,23 +152,12 @@ type BrokerConfig {
   configStoreType: String!
   userManagementEnabled: Boolean!
   anonymousEnabled: Boolean!
-  mcpEnabled: Boolean!
-  mcpPort: Int!
-  prometheusEnabled: Boolean!
-  prometheusPort: Int!
-  i3xEnabled: Boolean!
-  i3xPort: Int!
-  graphqlEnabled: Boolean!
-  graphqlPort: Int!
-  metricsEnabled: Boolean!
-  hmiEnabled: Boolean!
-  genAiEnabled: Boolean!
-  genAiProvider: String!
-  genAiModel: String!
   postgresUrl: String!
   postgresUser: String!
   crateDbUrl: String!
   crateDbUser: String!
+  questDbUrl: String!
+  questDbUser: String!
   mongoDbUrl: String!
   mongoDbDatabase: String!
   sqlitePath: String!
@@ -224,6 +215,8 @@ input CreateArchiveGroupInput {
   bulkSize: Int = 4000
   bulkTimeoutMs: Long = 1000
   queueDiskPath: String = "data/queue"
+  lastValReadOnly: Boolean = false
+  archiveReadOnly: Boolean = false
 }
 
 input CreateDatabaseConnectionInput {
@@ -282,6 +275,8 @@ enum DatabaseConnectionType {
   POSTGRES
   MONGODB
   SQLITE
+  CRATEDB
+  QUESTDB
 }
 
 enum DataFormat {
@@ -394,6 +389,7 @@ enum MessageArchiveType {
   NONE
   POSTGRES
   CRATEDB
+  QUESTDB
   MONGODB
   SQLITE
 }
@@ -550,6 +546,9 @@ type Mutation {
   archiveGroup: ArchiveGroupMutations!
   mqttClient: MqttClientMutations!
   hmi: HmiMutations!
+  saveRedfishMapping(name: String!, config: RedfishMappingConfigInput!, enabled: Boolean): RedfishResult!
+  deleteRedfishMapping(name: String!): Boolean!
+  toggleRedfishMapping(name: String!, enabled: Boolean!): RedfishResult!
   winCCOaDevice: WinCCOaDeviceMutations!
   winCCUaDevice: WinCCUaDeviceMutations!
 }
@@ -623,8 +622,74 @@ type Query {
   hmi(name: String!): Hmi
   hmiFiles(name: String!): [DashboardFile!]!
   exportHmiZip(name: String!): String!
+  redfishMappings: [RedfishMapping!]!
+  redfishMapping(name: String!): RedfishMapping
+  redfishLiveSensors(chassisId: String): [RedfishSensorStatus!]!
   winCCOaClients(name: String, node: String): [WinCCOaClient!]!
   winCCUaClients(name: String, node: String): [WinCCUaClient!]!
+}
+
+type RedfishMapping {
+  name: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: RedfishMappingConfig!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+}
+
+type RedfishMappingConfig {
+  topicPrefix: String!
+  topicFilters: [String!]!
+  chassisId: String
+  defaultReadingType: String
+  defaultReadingUnits: String
+  thresholds: RedfishThresholds
+  jsonSchema: JSON!
+}
+
+input RedfishMappingConfigInput {
+  topicPrefix: String
+  topicFilters: [String!]!
+  chassisId: String
+  defaultReadingType: String
+  defaultReadingUnits: String
+  thresholds: RedfishThresholdsInput
+  jsonSchema: JSON!
+}
+
+type RedfishResult {
+  redfish: RedfishMapping
+  success: Boolean!
+  message: String
+}
+
+type RedfishSensorStatus {
+  id: String!
+  name: String!
+  chassisId: String!
+  topic: String!
+  reading: Float!
+  readingType: String!
+  readingUnits: String!
+  health: String!
+  state: String!
+  lastUpdated: String!
+}
+
+type RedfishThresholds {
+  upperCaution: Float
+  upperCritical: Float
+  lowerCaution: Float
+  lowerCritical: Float
+}
+
+input RedfishThresholdsInput {
+  upperCaution: Float
+  upperCritical: Float
+  lowerCaution: Float
+  lowerCritical: Float
 }
 
 type RetainedMessage {
@@ -770,6 +835,8 @@ input UpdateArchiveGroupInput {
   bulkSize: Int
   bulkTimeoutMs: Long
   queueDiskPath: String
+  lastValReadOnly: Boolean
+  archiveReadOnly: Boolean
 }
 
 input UpdateDatabaseConnectionInput {
@@ -1048,6 +1115,7 @@ enum WinCCUaMessageFormat {
   JSON_ISO
   JSON_MS
   RAW_VALUE
+  RAW_JSON
 }
 
 type WinCCUaTransformConfig {
