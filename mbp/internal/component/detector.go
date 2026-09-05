@@ -129,10 +129,17 @@ func RefreshStatus(c *Component) {
 		}
 	}
 
-	// If dirty working tree has modified source code, consider it outdated or dirty
+	// If dirty working tree has modified source code, check if edits occurred after artifact build
 	if c.Git.IsDirty {
-		c.Status = StatusOutdated
-		return
+		if !c.Git.DirtyModTime.IsZero() {
+			if c.Git.DirtyModTime.After(latest.ModTime.Add(2 * time.Second)) {
+				c.Status = StatusOutdated
+				return
+			}
+		} else {
+			c.Status = StatusOutdated
+			return
+		}
 	}
 
 	c.Status = StatusBuilt

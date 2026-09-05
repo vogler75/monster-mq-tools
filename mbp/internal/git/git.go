@@ -3,7 +3,9 @@ package git
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ type Status struct {
 	CommitTime      time.Time `json:"commit_time"`
 	IsDirty         bool      `json:"is_dirty"`
 	DirtyFilesCount int       `json:"dirty_files_count"`
+	DirtyModTime    time.Time `json:"dirty_mod_time,omitempty"`
 	Upstream        string    `json:"upstream"`
 	HasUpstream     bool      `json:"has_upstream"`
 	Ahead           int       `json:"ahead"`
@@ -65,13 +68,29 @@ func GetStatusWithContext(ctx context.Context, repoDir string) Status {
 	if statusOut, err := exec.CommandContext(ctx, "git", "-C", repoDir, "status", "--porcelain").Output(); err == nil {
 		lines := strings.Split(strings.TrimSpace(string(statusOut)), "\n")
 		count := 0
+		var newestDirtyMod time.Time
 		for _, l := range lines {
-			if strings.TrimSpace(l) != "" {
-				count++
+			if strings.TrimSpace(l) == "" {
+				continue
+			}
+			count++
+			if len(l) > 3 {
+				relPath := strings.TrimSpace(l[3:])
+				if idx := strings.Index(relPath, " -> "); idx != -1 {
+					relPath = relPath[idx+4:]
+				}
+				relPath = strings.Trim(relPath, "\"")
+				fullPath := filepath.Join(repoDir, relPath)
+				if fi, err := os.Stat(fullPath); err == nil {
+					if fi.ModTime().After(newestDirtyMod) {
+						newestDirtyMod = fi.ModTime()
+					}
+				}
 			}
 		}
 		st.DirtyFilesCount = count
 		st.IsDirty = count > 0
+		st.DirtyModTime = newestDirtyMod
 	}
 
 	// 6. Upstream tracking branch
