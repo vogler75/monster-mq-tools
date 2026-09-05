@@ -1,0 +1,37 @@
+name: CLI GraphQL contract
+on:
+  pull_request:
+    paths: ['cli/**', 'scripts/graphql-contract/**', 'scripts/graphql-contract.sh', '.github/workflows/graphql-contract.yml']
+  push:
+    paths: ['cli/**', 'scripts/graphql-contract/**', 'scripts/graphql-contract.sh', '.github/workflows/graphql-contract.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tools
+      - uses: actions/checkout@v4
+        with:
+          repository: vogler75/monster-mq
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          repository: vogler75/monster-mq-edge
+          path: edge
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/cli/go.mod
+          cache-dependency-path: |
+            tools/cli/go.sum
+            tools/scripts/graphql-contract/go.sum
+      - run: go test ./...
+        working-directory: tools/scripts/graphql-contract
+      - run: tools/scripts/graphql-contract.sh --main-root main --edge-root edge --cli-root tools --output-dir "$RUNNER_TEMP/graphql-contract"
+      - run: go test ./...
+        working-directory: tools/cli
+        env:
+          MMQ_CONTRACT_DIR: ${{ runner.temp }}/graphql-contract

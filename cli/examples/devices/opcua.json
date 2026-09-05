@@ -1,0 +1,13 @@
+{
+  "type": "OPCUA-Client",
+  "input": {
+    "name": "opcua-example",
+    "namespace": "plant/opcua",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "endpointUrl": "opc.tcp://localhost:4840",
+      "securityPolicy": "None"
+    }
+  }
+}

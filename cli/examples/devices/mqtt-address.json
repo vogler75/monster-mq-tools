@@ -1,0 +1,7 @@
+{
+  "mode": "SUBSCRIBE",
+  "remoteTopic": "sensors/#",
+  "localTopic": "sensors/#",
+  "removePath": false,
+  "qos": 1
+}

@@ -1,0 +1,6 @@
+{
+  "address": "ns=2;s=Temperature",
+  "topic": "temperature",
+  "publishMode": "SEPARATE",
+  "writable": false
+}

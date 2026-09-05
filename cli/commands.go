@@ -935,11 +935,21 @@ func runDeviceList(ctx context.Context, client *Client, args []string) error {
 	filterType := ""
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if (arg == "--type" || arg == "-t") && i+1 < len(args) {
-			filterType = args[i+1]
+		if arg == "--type" || arg == "-t" {
 			i++
-		} else if !strings.HasPrefix(arg, "-") && filterType == "" {
+			if i >= len(args) || strings.HasPrefix(args[i], "-") {
+				return fmt.Errorf("--type requires a device type")
+			}
+			if filterType != "" {
+				return fmt.Errorf("specify device type only once")
+			}
+			filterType = args[i]
+		} else if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown device list option %s", arg)
+		} else if filterType == "" {
 			filterType = arg
+		} else {
+			return fmt.Errorf("unexpected device list argument %s", arg)
 		}
 	}
 
@@ -991,9 +1001,9 @@ func runDeviceList(ctx context.Context, client *Client, args []string) error {
 			CreatedAt string `json:"createdAt"`
 			UpdatedAt string `json:"updatedAt"`
 		}, 0)
-		ft := strings.ToLower(filterType)
+		ft := normalizedDeviceType(filterType)
 		for _, d := range devices {
-			if strings.Contains(strings.ToLower(d.Type), ft) {
+			if strings.Contains(normalizedDeviceType(d.Type), ft) {
 				filtered = append(filtered, d)
 			}
 		}
@@ -1027,6 +1037,14 @@ func runDeviceDownload(ctx context.Context, client *Client, args []string) error
 		fmt.Println()
 		fmt.Println("Export device JSON configurations to standard output or a file.")
 		return nil
+	}
+	if len(args) > 2 {
+		return fmt.Errorf("usage: device download [name] [file.json]")
+	}
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown device download option %s", arg)
+		}
 	}
 	name := ""
 	outFile := ""
@@ -1081,13 +1099,16 @@ func runDeviceDownload(ctx context.Context, client *Client, args []string) error
 		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
 	}
 
+	if name != "" && len(res.Data.GetDevices) == 0 {
+		return fmt.Errorf("device %q not found", name)
+	}
 	jsonBytes, err := json.MarshalIndent(res.Data.GetDevices, "", "  ")
 	if err != nil {
 		return err
 	}
 
 	if outFile != "" {
-		if err := os.WriteFile(outFile, jsonBytes, 0644); err != nil {
+		if err := os.WriteFile(outFile, jsonBytes, 0600); err != nil {
 			return fmt.Errorf("error writing output file: %w", err)
 		}
 		fmt.Printf("Device configuration saved to '%s'\n", outFile)
@@ -1099,15 +1120,24 @@ func runDeviceDownload(ctx context.Context, client *Client, args []string) error
 }
 
 func runDeviceUpload(ctx context.Context, client *Client, args []string) error {
-	if len(args) < 1 || hasHelpFlag(args) {
-		fmt.Println("Usage: mmq device upload <file.json>")
+	if hasHelpFlag(args) {
+		fmt.Println("Usage: mmq device upload <file.json|->")
 		fmt.Println()
 		fmt.Println("Import or bulk update device configurations from a JSON file.")
 		return nil
 	}
+	if len(args) != 1 {
+		return fmt.Errorf("usage: device upload <file.json|->")
+	}
 	inFile := args[0]
 
-	fileBytes, err := os.ReadFile(inFile)
+	var fileBytes []byte
+	var err error
+	if inFile == "-" {
+		fileBytes, err = io.ReadAll(os.Stdin)
+	} else {
+		fileBytes, err = os.ReadFile(inFile)
+	}
 	if err != nil {
 		return fmt.Errorf("error reading device config file: %w", err)
 	}
@@ -1122,6 +1152,14 @@ func runDeviceUpload(ctx context.Context, client *Client, args []string) error {
 		}
 	}
 
+	if len(configs) == 0 {
+		return fmt.Errorf("device import requires at least one object")
+	}
+	for i, item := range configs {
+		if obj, ok := item.(map[string]any); !ok || obj == nil {
+			return fmt.Errorf("configs[%d]: expected object", i)
+		}
+	}
 	query := `
 		mutation ImportDevices($configs: [DeviceInput!]!) {
 			importDevices(configs: $configs) {
@@ -1157,6 +1195,9 @@ func runDeviceUpload(ctx context.Context, client *Client, args []string) error {
 		return fmt.Errorf("GraphQL error: %s", res.Errors[0].Message)
 	}
 
+	if !res.Data.ImportDevices.Success || res.Data.ImportDevices.Failed > 0 {
+		return fmt.Errorf("device import failed (%d/%d imported, %d failed): %s", res.Data.ImportDevices.Imported, res.Data.ImportDevices.Total, res.Data.ImportDevices.Failed, strings.Join(res.Data.ImportDevices.Errors, "; "))
+	}
 	if client.cfg.JSONMode {
 		return printJSON(res.Data.ImportDevices)
 	}
@@ -1182,137 +1223,11 @@ func runDeviceDisable(ctx context.Context, client *Client, args []string) error 
 }
 
 func setDeviceEnabled(ctx context.Context, client *Client, args []string, enabled bool) error {
-	actionStr := "enable"
-	if !enabled {
-		actionStr = "disable"
+	action := "disable"
+	if enabled {
+		action = "enable"
 	}
-	if len(args) < 1 || hasHelpFlag(args) {
-		fmt.Printf("Usage: mmq device %s <name>\n\n", actionStr)
-		fmt.Printf("%s a configured device or edge MQTT client dynamically.\n", strings.Title(actionStr))
-		return nil
-	}
-	name := args[0]
-
-	getGql := `
-		query GetDevice($names: [String!]) {
-			getDevices(names: $names) {
-				name
-				namespace
-				nodeId
-				type
-				enabled
-				config
-			}
-		}
-	`
-	var getRes struct {
-		Data struct {
-			GetDevices []struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-				NodeID    string `json:"nodeId"`
-				Type      string `json:"type"`
-				Enabled   bool   `json:"enabled"`
-				Config    any    `json:"config"`
-			} `json:"getDevices"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-
-	if err := client.DoQuery(ctx, getGql, map[string]any{"names": []string{name}}, &getRes); err != nil {
-		return err
-	}
-	if len(getRes.Errors) > 0 {
-		return fmt.Errorf("GraphQL error: %s", getRes.Errors[0].Message)
-	}
-	if len(getRes.Data.GetDevices) == 0 {
-		return fmt.Errorf("device '%s' not found", name)
-	}
-
-	dev := getRes.Data.GetDevices[0]
-	updatedInput := map[string]any{
-		"name":      dev.Name,
-		"namespace": dev.Namespace,
-		"nodeId":    dev.NodeID,
-		"type":      dev.Type,
-		"enabled":   enabled,
-		"config":    dev.Config,
-	}
-
-	importGql := `
-		mutation ImportDevices($configs: [DeviceInput!]!) {
-			importDevices(configs: $configs) {
-				success
-				imported
-				failed
-				total
-				errors
-			}
-		}
-	`
-	var importRes struct {
-		Data struct {
-			ImportDevices struct {
-				Success  bool     `json:"success"`
-				Imported int      `json:"imported"`
-				Failed   int      `json:"failed"`
-				Total    int      `json:"total"`
-				Errors   []string `json:"errors"`
-			} `json:"importDevices"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-
-	if err := client.DoQuery(ctx, importGql, map[string]any{"configs": []any{updatedInput}}, &importRes); err != nil {
-		return err
-	}
-
-	if strings.EqualFold(dev.Type, "MQTT-Client") || strings.EqualFold(dev.Type, "MQTT_CLIENT") {
-		toggleGql := `
-			mutation ToggleMqttClient($name: String!, $enabled: Boolean!) {
-				mqttClient {
-					toggle(name: $name, enabled: $enabled) {
-						success
-					}
-				}
-			}
-		`
-		var toggleRes struct {
-			Data struct {
-				MqttClient struct {
-					Toggle struct {
-						Success bool `json:"success"`
-					} `json:"toggle"`
-				} `json:"mqttClient"`
-			} `json:"data"`
-		}
-		if err := client.DoQuery(ctx, toggleGql, map[string]any{
-			"name":    name,
-			"enabled": enabled,
-		}, &toggleRes); err != nil {
-			return err
-		}
-	}
-
-	statusStr := "enabled"
-	if !enabled {
-		statusStr = "disabled"
-	}
-
-	if client.cfg.JSONMode {
-		return printJSON(map[string]any{
-			"device":  name,
-			"enabled": enabled,
-			"success": true,
-		})
-	}
-
-	fmt.Printf("Device '%s' %s successfully\n", name, statusStr)
-	return nil
+	return runDevice(ctx, client, append([]string{action}, args...))
 }
 
 func runListFeatures(ctx context.Context, client *Client, args []string) error {
@@ -1788,9 +1703,9 @@ func runSessionRemove(ctx context.Context, client *Client, args []string) error 
 
 	query := `
 		mutation RemoveSessions($clientIds: [String!]!) {
-			sessions {
+			session {
 				removeSessions(clientIds: $clientIds) {
-					details {
+					results {
 						clientId
 						success
 					}
@@ -1800,14 +1715,14 @@ func runSessionRemove(ctx context.Context, client *Client, args []string) error 
 	`
 	var res struct {
 		Data struct {
-			Sessions struct {
+			Session struct {
 				RemoveSessions struct {
-					Details []struct {
+					Results []struct {
 						ClientId string `json:"clientId"`
 						Success  bool   `json:"success"`
-					} `json:"details"`
+					} `json:"results"`
 				} `json:"removeSessions"`
-			} `json:"sessions"`
+			} `json:"session"`
 		} `json:"data"`
 		Errors []struct {
 			Message string `json:"message"`
@@ -1822,10 +1737,10 @@ func runSessionRemove(ctx context.Context, client *Client, args []string) error 
 	}
 
 	if client.cfg.JSONMode {
-		return printJSON(res.Data.Sessions.RemoveSessions.Details)
+		return printJSON(res.Data.Session.RemoveSessions.Results)
 	}
 
-	for _, d := range res.Data.Sessions.RemoveSessions.Details {
+	for _, d := range res.Data.Session.RemoveSessions.Results {
 		status := "failed"
 		if d.Success {
 			status = "removed"
@@ -2744,4 +2659,3 @@ func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 	fmt.Printf("✓ HMI dashboard '%s' imported successfully from %s%s\n", nameArg, sourceDesc, urlPath)
 	return nil
 }
-

@@ -34,7 +34,7 @@
 - **Publish & Inspect Messages**: Read current/retained topic values or publish payloads with QoS controls.
 - **Search Topics**: Discover active topics matching wildcard patterns across archive groups.
 - **Query Historical & Aggregated Metrics**: Extract time-series data, daily message counts, and historical logs.
-- **Manage Edge & Gateway Devices**: Import, export, enable, or disable device configurations dynamically.
+- **Configure Devices**: Discover schemas, validate and apply settings, manage addresses and lifecycle, inspect status, and import/export backups.
 - **Inspect Features**: Query broker nodes to inspect available and enabled features at runtime.
 
 ---
@@ -367,46 +367,115 @@ mmq aggregatedMessages sensors/temp/room1 sensors/temp/room2 \
 
 ## Device Configuration Management
 
-Manage edge device, gateway, and subsystem configurations on both Full and Edge brokers.
+`mmq device` configures protocol connectors through their dedicated GraphQL APIs. Commands discover input fields and available operations from the target broker using introspection. Run `mmq device --help` for the command summary.
 
-#### `device list`
-List all configured devices and edge nodes, with optional device type filtering.
+Supported adapters: MQTT, OPC UA, Kafka, WinCC OA, WinCC Unified, PLC4X, NATS, Redis, Neo4j, Telegram and i3X clients; OPC UA and Kafka servers; JDBC, InfluxDB and TimeBase loggers; Sparkplug B decoders. Type aliases ignore case, hyphens and underscores (`OPCUA_CLIENT`, `OPCUA-Client`, `opcua`). Availability depends on the target broker. HMI management remains under `mmq hmi`; this interface does not reconfigure broker listener/YAML settings or install missing protocol implementations.
 
-```bash
-mmq device list [type] [--type <type>]
-```
-
-*Examples:*
-```bash
-# List all devices
-mmq device list
-
-# Filter by type
-mmq device list OPCUA_CLIENT
-mmq device list --type MQTT_CLIENT
-```
-
-#### `device download`
-Export device JSON configurations to standard output or a file.
+### Discover the target
 
 ```bash
-mmq device download [device-name] [output-file.json]
+mmq --json device types
+mmq --json device schema mqtt
+mmq --json device schema opcua addAddress
+mmq device template mqtt > mqtt.json
 ```
 
-#### `device upload`
-Import or bulk update device configurations from a JSON file.
+`types` lists the mutation operations actually exposed by the target and its enabled feature list. API presence does not guarantee that a feature is enabled on the assigned node; mutations enforce those checks. Edge exposes fewer APIs than Full Broker. New device commands require introspection. Name-based lookup and apply additionally require the `DeviceImportExport` feature, because they read existing configurations through `getDevices`.
+
+`schema <type> [operation]` returns native GraphQL argument types, descriptions, defaults, nested input fields and enum choices. It defaults to the adapter's creation operation. `template` generates a minimal `{ "type": ..., "input": ... }` document with required fields. Fill in blank connection values and choose the appropriate `nodeId`; `*` follows the broker's assignment semantics and can mean all nodes. Optional settings are described by `schema`.
+
+### Create and update
 
 ```bash
-mmq device upload <config-file.json>
+mmq --json device validate mqtt.json
+mmq --json device apply mqtt.json --dry-run
+mmq --json device apply mqtt.json
+mmq --json device enable mqtt-example
+mmq --json device status mqtt-example
 ```
 
-#### `device enable` / `device disable`
-Enable or disable a configured device or edge MQTT client dynamically.
+Example apply document:
+
+```json
+{
+  "type": "MQTT-Client",
+  "input": {
+    "name": "mqtt-example",
+    "namespace": "external/mqtt",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "brokerUrl": "tcp://localhost:1883",
+      "clientId": "monstermq-example"
+    }
+  }
+}
+```
+
+`apply` checks for an existing device by name, rejects type changes, and invokes the dedicated create/add or update mutation. New devices default to `enabled: false` unless explicitly supplied. For updates, supplied objects merge recursively with stored configuration; omitted values, credentials and enabled state are preserved. Arrays replace the corresponding array. Explicit null is sent to the broker, whose mutation semantics determine whether a nullable value can be cleared. Updates are read/merge/write operations, not atomic patches: avoid concurrent writers to the same device.
+
+Connection settings for MQTT and OPC UA do not accept address arrays; their brokers manage addresses separately. Updates preserve existing mappings. Unsupported fields in user input fail validation rather than being silently dropped. Exported backup JSON is a different format; use `upload` for backups.
+
+`validate` and `apply --dry-run` read the broker but never mutate it. Both show the intended operation, merged input and field changes, with password/secret/token/private-key fields redacted. Validation checks required fields, scalar types, lists, enum values and unknown fields against the target schema. It does not test connections, validate certificates, or replace broker-side semantic/range checks. There is no transaction or automatic rollback. Do not use these outputs as backup files. `[REDACTED]` placeholders are rejected as input; omit those fields when updating.
+
+All file-input commands accept `-` for stdin:
 
 ```bash
-mmq device enable <device-name>
-mmq device disable <device-name>
+cat mqtt.json | mmq --json device apply -
 ```
+
+### Address mappings and OPC UA browsing
+
+```bash
+mmq --json device address list mqtt-example
+mmq --json device schema mqtt addAddress
+mmq --json device address add mqtt-example examples/devices/mqtt-address.json
+mmq --json device address update mqtt-example 'sensors/#' examples/devices/mqtt-address.json
+mmq --json device address delete mqtt-example 'sensors/#'
+
+mmq --json device apply examples/devices/opcua.json
+mmq --json device enable opcua-example
+mmq --json device browse opcua-example
+mmq --json device browse opcua-example 'ns=2;s=MyDevice'
+mmq --json device address add opcua-example examples/devices/opcua-address.json
+```
+
+Address files contain the native address input object. The update/delete key is the broker's identifier, e.g. MQTT `remoteTopic`, OPC UA `address`, WinCC OA `query`, Unified `topic`, or i3X `elementId`. Operations not present in the target schema are rejected. OPC UA currently exposes add/delete, but no updateAddress operation; change a mapping through explicit delete/add operations. Browse uses the configured OPC UA client name and defaults to Objects (`i=85`). Edit the example endpoints, node assignments and addresses for your installation before applying them.
+
+### Lifecycle, status and native operations
+
+```bash
+mmq --json device get mqtt-example
+mmq --json device disable mqtt-example
+mmq --json device delete mqtt-example
+mmq --json device status opcua-example --wait --timeout 30s
+mmq --json device enable opcua-example --wait --timeout 30s
+```
+
+Enable/disable use type-specific toggle APIs, never backup import. `get` redacts credential fields. `status` distinguishes available configuration state from runtime connectivity using `runtimeKnown`. `--wait` polls for connected=true (or connected=false for disable), and requires a runtime connectivity API. If unavailable, it fails before a lifecycle/apply mutation. In particular, the current Full/Edge MQTT device APIs do not expose that connectivity Boolean; inspect status and verify topic values instead. Apply with `--wait` requires `enabled: true`. A timeout does not undo a completed mutation. `--timeout` requires `--wait`, defaults to 30 seconds and accepts positive Go durations such as `5s` or `1m`; `--wait` and `--dry-run` cannot be combined.
+
+For additional operations such as start/stop, reassignment, certificates or decoder rules, use the native mutation interface:
+
+```bash
+mmq --json device schema mqtt reassign
+# reassign.json: {"name":"mqtt-example","nodeId":"node2"}
+mmq --json device call mqtt reassign reassign.json --dry-run
+mmq --json device call mqtt reassign reassign.json
+```
+
+`call <type> <operation> <args.json|->` validates the complete native argument object and checks mutation results. It does not perform apply's merge or default-to-disabled behavior; native API defaults apply. Use `schema` to discover arguments for operations whose signatures differ from the convenience commands.
+
+### Backups and automation
+
+```bash
+mmq --json device list --type MQTT_CLIENT
+mmq device download mqtt-example backup.json
+mmq --json device upload backup.json
+```
+
+`list [type] [--type <type>]` filters configured devices. `download [name] [file.json]` exports raw configuration, including credentials. Newly created export files use owner-only permissions. `upload <file.json|->` accepts a single backup object or an array; both brokers force imported devices to disabled. Use dedicated enable commands afterwards. Import can partially succeed; any failed item results in a nonzero exit.
+
+New configuration commands emit JSON in both normal and `--json` mode. With `--json`, failures produce `{ "success": false, "error": "..." }` on stdout and a nonzero process exit, with diagnostics on stderr. Place global options before `device`. Unknown options and missing arguments fail. AI workflow: discover types/schema → prepare input → validate/dry-run → apply → configure addresses → enable → check runtime state and topic values.
 
 ---
 
@@ -543,3 +612,33 @@ mmq aggregatedMessages "factory/floor1/temp" --interval ONE_HOUR --functions AVG
 ## License
 
 MonsterMQ CLI is licensed under the terms included in the [LICENSE](file:///Users/vogler/Workspace/monster/cli/LICENSE) file.
+
+## Keeping the CLI aligned with GraphQL
+
+The tools-owned generator reads the actual Full/Edge broker schemas and validates
+complete literal CLI operations and the device adapter registry. Runtime
+`device schema` still uses live introspection.
+
+There are no stored schema copies in the CLI repository. Device tests generate
+contracts once per test run in a temporary directory from sibling `main` and
+`edge` source checkouts, then validate their actual requests and variables against
+those contracts. Temporary files are removed after loading. These tests require
+both sibling checkouts, or an externally generated contract directory:
+
+```bash
+# From tools; use any output directory outside the repository.
+./scripts/graphql-contract.sh --edge-root ../edge --cli-root . --output-dir /tmp/mmq-contract
+(cd cli && MMQ_CONTRACT_DIR=/tmp/mmq-contract go test ./...)
+```
+
+`MMQ_CONTRACT_DIR` is a test-only environment variable pointing to a directory
+containing `main/` and `edge/`, each with `schema.graphql` and `introspection.json`.
+With sibling checkouts it may be omitted. Missing contracts or generation errors
+fail the tests; they are not silently skipped. CI generates contracts under the
+runner's temporary directory and passes that path to the tests.
+
+The generator's default output is `main/doc/graphql/`, with separate `main/` and
+`edge/` subdirectories. `--output-dir` redirects those artifacts; `--check` verifies
+them without writing. `--cli-root` validates the CLI but writes no files into it.
+Session removal uses `session.removeSessions.results`. New groups and behavior
+changes still require adapter/workflow changes and integration tests.

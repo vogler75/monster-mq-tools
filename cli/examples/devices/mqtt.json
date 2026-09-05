@@ -1,0 +1,15 @@
+{
+  "type": "MQTT-Client",
+  "input": {
+    "name": "mqtt-example",
+    "namespace": "external/mqtt",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "brokerUrl": "tcp://localhost:1883",
+      "clientId": "monstermq-example",
+      "cleanSession": true,
+      "keepAlive": 60
+    }
+  }
+}

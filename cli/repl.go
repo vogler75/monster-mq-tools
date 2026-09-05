@@ -157,6 +157,17 @@ func buildCompleter() *readline.PrefixCompleter {
 				readline.PcItem("MQTT_SERVER"),
 				readline.PcItem("KAFKA_CLIENT"),
 			),
+			readline.PcItem("types"),
+			readline.PcItem("schema"),
+			readline.PcItem("template"),
+			readline.PcItem("get"),
+			readline.PcItem("validate"),
+			readline.PcItem("apply"),
+			readline.PcItem("delete"),
+			readline.PcItem("status"),
+			readline.PcItem("browse"),
+			readline.PcItem("address"),
+			readline.PcItem("call"),
 			readline.PcItem("download"),
 			readline.PcItem("upload"),
 			readline.PcItem("enable"),
@@ -276,7 +287,7 @@ Broker & Topic Operations:
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
   importHmiZip <file.zip> [name]              Import & deploy HMI dashboard from a zip
   brokerConfig (or 'features')                List enabled broker features & capabilities
-  device list|download|upload|enable|disable Manage edge devices
+  device <command>                           Configure devices (device --help)
 
 Interactive Shell Commands:
   connect <url|host:port|port>                Switch / reconnect to a broker endpoint

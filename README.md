@@ -116,3 +116,53 @@ To fetch and update schemas from running broker instances:
 ## License
 
 MonsterMQ Tools is licensed under the terms included in the [LICENSE](LICENSE) file.
+
+### AI-driven device configuration
+
+The MonsterMQ CLI now discovers device APIs from the target broker and configures
+MQTT, OPC UA, Kafka, WinCC OA/Unified, PLC4X, NATS, Redis, Neo4j, Telegram, i3X,
+OPC UA/Kafka servers, JDBC/InfluxDB/TimeBase loggers and Sparkplug B decoders where
+those APIs are available. Edge and Full Broker capabilities differ.
+
+```bash
+mmq --json device types
+mmq device template mqtt > mqtt.json
+# Fill in connection settings and the node assignment.
+mmq --json device validate mqtt.json
+mmq --json device apply mqtt.json --dry-run
+mmq --json device apply mqtt.json
+mmq --json device enable my-device
+mmq --json device status my-device
+```
+
+Use `device schema`, `device address`, `device browse`, and `device call` for
+protocol-specific settings and operations. New devices default to disabled;
+updates preserve omitted settings. Import/export remains a separate backup
+workflow, and imports always disable devices. Failed operations, including partial
+imports, return nonzero exits. Runtime waiting is available only when the target
+API exposes connectivity; enabled state alone is not connection confirmation.
+
+See the [complete device command reference](cli/README.md#device-configuration-management)
+and [MQTT/OPC UA example files](cli/examples/devices). No broker changes are required
+for APIs already exposed by the target. Name-based configuration requires the
+`DeviceImportExport` feature, and schema discovery requires introspection.
+
+### GraphQL contract maintenance
+
+The generator in `scripts/graphql-contract` validates the broker SDL, complete
+literal CLI operations, and the adapter registry. It does not store schema copies
+in the CLI repository. From the tools checkout:
+
+```bash
+./scripts/graphql-contract.sh --edge-root ../edge --cli-root . --output-dir /tmp/mmq-contract
+(cd cli && MMQ_CONTRACT_DIR=/tmp/mmq-contract go test ./...)
+```
+
+Without `MMQ_CONTRACT_DIR`, device tests generate temporary contracts automatically
+from sibling `main` and `edge` source checkouts. CI uses a temporary output directory.
+Tests validate actual GraphQL requests and variables against these schemas.
+Missing source checkouts or contracts cause a test failure, not a skipped check.
+The default documentation output remains `main/doc/graphql/main/` and
+`main/doc/graphql/edge/`; use `--output-dir` to choose another location and `--check`
+to verify generated artifacts without writing. Session removal uses the broker's
+`session.removeSessions.results` contract.

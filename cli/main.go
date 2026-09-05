@@ -52,7 +52,7 @@ Commands:
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
   importHmiZip <file.zip> [name]              Import & deploy HMI dashboard from a zip
   brokerConfig                                List enabled broker features & capabilities
-  device list|download|upload|enable|disable Manage edge devices
+  device <command>                           Configure devices (device --help)
 
 Examples:
   mmq                                                       # Start interactive CLI session on localhost:4000
@@ -107,7 +107,9 @@ func main() {
 		}
 	}
 
-	_ = fs.Parse(globalArgs)
+	if err := fs.Parse(globalArgs); err != nil {
+		os.Exit(2)
+	}
 
 	if helpFlag {
 		fmt.Print(usageText)
@@ -271,25 +273,7 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 	case "importHmiZip":
 		return runImportHmiZip(ctx, client, subargs)
 	case "device":
-		if len(subargs) == 0 {
-			return runDeviceList(ctx, client, nil)
-		}
-		action := subargs[0]
-		actionArgs := subargs[1:]
-		switch action {
-		case "list":
-			return runDeviceList(ctx, client, actionArgs)
-		case "download":
-			return runDeviceDownload(ctx, client, actionArgs)
-		case "upload":
-			return runDeviceUpload(ctx, client, actionArgs)
-		case "enable":
-			return runDeviceEnable(ctx, client, actionArgs)
-		case "disable":
-			return runDeviceDisable(ctx, client, actionArgs)
-		default:
-			return fmt.Errorf("unknown device action '%s' (use 'list', 'download', 'upload', 'enable', or 'disable')", action)
-		}
+		return runDevice(ctx, client, subargs)
 	default:
 		return fmt.Errorf("unknown command '%s'. Run 'mmq --help' or 'help' for usage", subcmd)
 	}
