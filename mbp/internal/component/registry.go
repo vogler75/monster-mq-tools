@@ -381,6 +381,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 					Args:        []string{},
 				},
 				{
+					ID:          "build-pwa",
+					Name:        "PWA Web Bundle",
+					Description: "Build production PWA bundle (dist/)",
+					Command:     "./build-pwa.sh",
+					Args:        []string{},
+				},
+				{
 					ID:          "build-docker",
 					Name:        "Docker Image",
 					Description: "Build Explorer web docker container",
