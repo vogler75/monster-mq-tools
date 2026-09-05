@@ -1,6 +1,7 @@
 # Binaries and build artifacts
 bin/
 cli/bin/
+mbp/bin/
 *.exe
 *.exe~
 *.dll

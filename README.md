@@ -14,7 +14,7 @@ This repository provides command-line tools and utilities designed to simplify a
 | :--- | :--- | :--- | :--- |
 | [`/cli`](cli) | **MonsterMQ CLI (`mmq`)** | Go interactive REPL shell and command-line interface for GraphQL operations, real-time message publishing/subscribing, topic discovery, historical/TSDB metric querying, and device/client management. | Full Broker & Edge Broker |
 | [`/i3x`](i3x) | **i3X CLI (`i3x`)** | Go interactive REPL shell and command-line tool for i3X 1.0 API specification (Industrial Information Interface eXchange), exploring namespaces/types/objects, querying/writing values, historical telemetry, and SSE live subscriptions. | i3X 1.0 Compliant Brokers & Servers |
-| [`/build-pipeline`](build-pipeline) | **Build Pipeline (`mbp`)** | Go interactive Terminal UI (TUI) and headless CLI for inspecting git/build statuses, building, observing real-time logs, and publishing all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`). | Ecosystem Orchestrator |
+| [`/mbp`](mbp) | **Build Pipeline (`mbp`)** | Go interactive Terminal UI (TUI) and headless CLI for inspecting git/build statuses, building, observing real-time logs, and publishing all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`). | Ecosystem Orchestrator |
 | [`/hmi`](hmi) | **Edge HMI Dashboards** | Standalone web HMIs and industrial dashboard applications hosted and served directly by MonsterMQ Edge brokers. | Edge Broker |
 
 ---
@@ -168,20 +168,20 @@ Device tests in `cli/` validate actual GraphQL requests and schema introspection
 
 ## Quick Start: Build Pipeline & Orchestrator (`mbp`)
 
-Located in [`build-pipeline/`](build-pipeline). Provides an interactive Terminal UI and headless CLI to inspect, compile, build, observe, and publish all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`).
+Located in [`mbp/`](mbp). Provides an interactive Terminal UI and headless CLI to inspect, compile, build, observe, and publish all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`).
 
 ```bash
 # Build the mbp tool
-(cd build-pipeline && ./build.sh)
+(cd mbp && ./build.sh)
 
 # Launch interactive Terminal UI
-./build-pipeline/bin/mbp
+./mbp/bin/mbp
 
 # Print component status overview
-./build-pipeline/bin/mbp status
+./mbp/bin/mbp status
 
 # Headlessly build a component or all components
-./build-pipeline/bin/mbp build edge
-./build-pipeline/bin/mbp build all
+./mbp/bin/mbp build edge
+./mbp/bin/mbp build all
 ```
 
