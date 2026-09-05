@@ -156,33 +156,20 @@ mmq --json searchTopics "sensors/#"
 
 > **MANDATORY**: Whenever a subcommand, flag, GraphQL query, or feature capability is added, modified, or deprecated in `mmq`, this `SKILL.md` file **MUST** be updated to reflect the change.
 
-## GraphQL contract freshness
+## GraphQL Schemas and Comparison
 
-The generator lives in `tools/scripts/graphql-contract/`, launched using
-`tools/scripts/graphql-contract.sh`. It reads the Full runtime schema list and
-Edge gqlgen inputs, validates literal CLI operations and the adapter registry.
-It writes no schema copies into the CLI repository.
+The `gql/` directory maintains GraphQL SDL schemas (`main.gql` and `edge.gql`) fetched from running brokers, along with fetch and comparison tools:
 
 ```bash
-# From tools:
-./scripts/graphql-contract.sh --edge-root ../edge --cli-root . --output-dir /tmp/mmq-contract
-(cd cli && MMQ_CONTRACT_DIR=/tmp/mmq-contract go test ./...)
+# Fetch schemas from running brokers (and optionally compare)
+./gql/fetch-schemas.sh --compare
+
+# Compare schemas with the Go tool
+./gql/compare-schemas.sh
+# or summary only
+(cd gql && go run . -summary)
 ```
 
-`--output-dir` overrides the default `main/doc/graphql/` output, which contains
-separate `main/` and `edge/` directories. `--check` verifies generated outputs
-without writing. `--cli-root` validates CLI compatibility only.
+CLI device tests (`cli/devices_test.go`) read `main.gql` and `edge.gql` directly from `gql/` to validate actual queries, mutations, and variables without external checkout dependencies. `MMQ_CONTRACT_DIR` remains supported for optional test-only custom schema overrides.
 
-`MMQ_CONTRACT_DIR` is test-only: a directory containing `main/` and `edge/`, each
-with `schema.graphql` and `introspection.json`. When omitted, CLI device tests
-create temporary contracts from sibling main/edge source checkouts and remove
-temporary files after loading. Missing sources/contracts fail tests explicitly.
-CI generates contracts in its temporary directory. Do not recreate stored CLI
-schema copies.
-
-Runtime `device schema` uses live introspection. GraphQL `#` comments are not
-introspection descriptions; use triple-quoted descriptions for AI-visible help.
-New groups/semantics still require adapter tests. Session removal uses
-`session.removeSessions.results`. Use `--check --live-url <url>` for source/live
-shape comparison, with `GRAPHQL_CONTRACT_TOKEN` if needed. It does not verify
-mutation behavior, permissions or connector readiness.
+Runtime `device schema` uses live introspection. GraphQL `#` comments are not introspection descriptions; use triple-quoted descriptions for AI-visible help. Session removal uses `session.removeSessions.results`.

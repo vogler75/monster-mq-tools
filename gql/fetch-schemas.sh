@@ -14,6 +14,7 @@ Options:
   -m, --main     Fetch only the Main Broker schema
   -e, --edge     Fetch only the Edge Broker schema
   -a, --all      Fetch both schemas (default behavior)
+  -c, --compare  Compare fetched schemas after fetching
   -h, --help     Show this help message and exit
 
 Arguments:
@@ -40,6 +41,7 @@ EOF
 
 FETCH_MAIN=false
 FETCH_EDGE=false
+COMPARE_AFTER=false
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -59,6 +61,10 @@ while [[ $# -gt 0 ]]; do
         -a|--all)
             FETCH_MAIN=true
             FETCH_EDGE=true
+            shift
+            ;;
+        -c|--compare)
+            COMPARE_AFTER=true
             shift
             ;;
         -*)
@@ -149,6 +155,11 @@ fi
 echo ""
 if [ $HAS_ERROR -eq 0 ]; then
     echo "Done!"
+    if [ "$COMPARE_AFTER" = true ]; then
+        echo ""
+        echo "Running schema comparison..."
+        (cd "$SCRIPT_DIR" && go run . "$OUTPUT_DIR/main.gql" "$OUTPUT_DIR/edge.gql")
+    fi
     exit 0
 else
     echo "Completed with errors (check if target brokers are running)."

@@ -14,6 +14,7 @@ This repository provides command-line tools and utilities designed to simplify a
 | :--- | :--- | :--- | :--- |
 | [`/cli`](cli) | **MonsterMQ CLI (`mmq`)** | Go interactive REPL shell and command-line interface for GraphQL operations, real-time message publishing/subscribing, topic discovery, historical/TSDB metric querying, and device/client management. | Full Broker & Edge Broker |
 | [`/i3x`](i3x) | **i3X CLI (`i3x`)** | Go interactive REPL shell and command-line tool for i3X 1.0 API specification (Industrial Information Interface eXchange), exploring namespaces/types/objects, querying/writing values, historical telemetry, and SSE live subscriptions. | i3X 1.0 Compliant Brokers & Servers |
+| [`/build-pipeline`](build-pipeline) | **Build Pipeline (`mbp`)** | Go interactive Terminal UI (TUI) and headless CLI for inspecting git/build statuses, building, observing real-time logs, and publishing all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`). | Ecosystem Orchestrator |
 | [`/hmi`](hmi) | **Edge HMI Dashboards** | Standalone web HMIs and industrial dashboard applications hosted and served directly by MonsterMQ Edge brokers. | Edge Broker |
 
 ---
@@ -147,22 +148,40 @@ and [MQTT/OPC UA example files](cli/examples/devices). No broker changes are req
 for APIs already exposed by the target. Name-based configuration requires the
 `DeviceImportExport` feature, and schema discovery requires introspection.
 
-### GraphQL contract maintenance
+### GraphQL schemas and comparison
 
-The generator in `scripts/graphql-contract` validates the broker SDL, complete
-literal CLI operations, and the adapter registry. It does not store schema copies
-in the CLI repository. From the tools checkout:
+The `gql/` directory contains GraphQL SDL schemas (`main.gql` and `edge.gql`) fetched from running brokers, along with tooling to fetch and compare them:
 
 ```bash
-./scripts/graphql-contract.sh --edge-root ../edge --cli-root . --output-dir /tmp/mmq-contract
-(cd cli && MMQ_CONTRACT_DIR=/tmp/mmq-contract go test ./...)
+# Fetch schemas from running brokers (and optionally compare)
+./gql/fetch-schemas.sh --compare
+
+# Compare schemas (main.gql vs edge.gql)
+./gql/compare-schemas.sh
+# or with summary only
+(cd gql && go run . -summary)
 ```
 
-Without `MMQ_CONTRACT_DIR`, device tests generate temporary contracts automatically
-from sibling `main` and `edge` source checkouts. CI uses a temporary output directory.
-Tests validate actual GraphQL requests and variables against these schemas.
-Missing source checkouts or contracts cause a test failure, not a skipped check.
-The default documentation output remains `main/doc/graphql/main/` and
-`main/doc/graphql/edge/`; use `--output-dir` to choose another location and `--check`
-to verify generated artifacts without writing. Session removal uses the broker's
-`session.removeSessions.results` contract.
+Device tests in `cli/` validate actual GraphQL requests and schema introspection directly against `gql/main.gql` and `gql/edge.gql` (or `MMQ_CONTRACT_DIR` if overridden). Run unit tests via `(cd cli && go test ./...)`.
+
+---
+
+## Quick Start: Build Pipeline & Orchestrator (`mbp`)
+
+Located in [`build-pipeline/`](build-pipeline). Provides an interactive Terminal UI and headless CLI to inspect, compile, build, observe, and publish all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`).
+
+```bash
+# Build the mbp tool
+(cd build-pipeline && ./build.sh)
+
+# Launch interactive Terminal UI
+./build-pipeline/bin/mbp
+
+# Print component status overview
+./build-pipeline/bin/mbp status
+
+# Headlessly build a component or all components
+./build-pipeline/bin/mbp build edge
+./build-pipeline/bin/mbp build all
+```
+

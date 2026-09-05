@@ -619,30 +619,25 @@ MonsterMQ CLI is licensed under the terms included in the [LICENSE](file:///User
 
 ## Keeping the CLI aligned with GraphQL
 
-The tools-owned generator reads the actual Full/Edge broker schemas and validates
-complete literal CLI operations and the device adapter registry. Runtime
-`device schema` still uses live introspection.
+The `gql/` directory maintains the GraphQL schemas (`main.gql` and `edge.gql`) fetched from running MonsterMQ Full Broker and Edge Broker instances.
 
-There are no stored schema copies in the CLI repository. Device tests generate
-contracts once per test run in a temporary directory from sibling `main` and
-`edge` source checkouts, then validate their actual requests and variables against
-those contracts. Temporary files are removed after loading. These tests require
-both sibling checkouts, or an externally generated contract directory:
+Device tests in `cli/devices_test.go` load schemas directly from `../gql/` to validate actual requests, mutations, and variables during unit tests without needing external checkouts:
 
 ```bash
-# From tools; use any output directory outside the repository.
-./scripts/graphql-contract.sh --edge-root ../edge --cli-root . --output-dir /tmp/mmq-contract
-(cd cli && MMQ_CONTRACT_DIR=/tmp/mmq-contract go test ./...)
+# Run unit tests directly
+cd cli && go test ./...
 ```
 
-`MMQ_CONTRACT_DIR` is a test-only environment variable pointing to a directory
-containing `main/` and `edge/`, each with `schema.graphql` and `introspection.json`.
-With sibling checkouts it may be omitted. Missing contracts or generation errors
-fail the tests; they are not silently skipped. CI generates contracts under the
-runner's temporary directory and passes that path to the tests.
+You can update the schemas from running brokers and compare them using the tools in `gql/`:
 
-The generator's default output is `main/doc/graphql/`, with separate `main/` and
-`edge/` subdirectories. `--output-dir` redirects those artifacts; `--check` verifies
-them without writing. `--cli-root` validates the CLI but writes no files into it.
-Session removal uses `session.removeSessions.results`. New groups and behavior
-changes still require adapter/workflow changes and integration tests.
+```bash
+# Fetch schemas from running brokers and compare
+./gql/fetch-schemas.sh --compare
+
+# Compare schemas with the Go tool
+./gql/compare-schemas.sh
+# or
+(cd gql && go run . -summary)
+```
+
+`MMQ_CONTRACT_DIR` remains supported as an optional test-only environment variable to override schemas with a custom directory containing `main/` and `edge/` contracts if desired.

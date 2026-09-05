@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -29,46 +28,162 @@ var contractOnce sync.Once
 var contractFiles map[string][]byte
 var contractError error
 
-// Read external contracts or generate them from sibling broker sources into a
-// temporary directory. Nothing is copied into the CLI repository.
+func testTypeRef(s *ast.Schema, t *ast.Type) map[string]any {
+	if t.NonNull {
+		copy := *t
+		copy.NonNull = false
+		return map[string]any{"kind": "NON_NULL", "name": nil, "ofType": testTypeRef(s, &copy)}
+	}
+	if t.Elem != nil {
+		return map[string]any{"kind": "LIST", "name": nil, "ofType": testTypeRef(s, t.Elem)}
+	}
+	kind := "OBJECT"
+	if def, ok := s.Types[t.NamedType]; ok {
+		kind = string(def.Kind)
+	}
+	return map[string]any{"kind": kind, "name": t.NamedType, "ofType": nil}
+}
+
+func testInputValue(s *ast.Schema, n, d string, t *ast.Type, v *ast.Value) map[string]any {
+	var def any
+	if v != nil {
+		def = v.String()
+	}
+	var desc any
+	if d != "" {
+		desc = d
+	}
+	return map[string]any{"name": n, "description": desc, "type": testTypeRef(s, t), "defaultValue": def}
+}
+
+func buildTestIntrospection(s *ast.Schema) []byte {
+	types := []any{}
+	seen := map[string]bool{}
+	var walk func(string)
+	walk = func(n string) {
+		if seen[n] || strings.HasPrefix(n, "__") {
+			return
+		}
+		seen[n] = true
+		d := s.Types[n]
+		if d == nil {
+			return
+		}
+		item := map[string]any{
+			"kind": string(d.Kind), "name": n, "description": d.Description,
+			"fields": nil, "inputFields": nil, "enumValues": nil,
+		}
+		fields, inputs, enums := []any{}, []any{}, []any{}
+		for _, f := range d.Fields {
+			if strings.HasPrefix(f.Name, "__") {
+				continue
+			}
+			walk(f.Type.Name())
+			if d.Kind == ast.InputObject {
+				inputs = append(inputs, testInputValue(s, f.Name, f.Description, f.Type, f.DefaultValue))
+				continue
+			}
+			args := []any{}
+			for _, a := range f.Arguments {
+				args = append(args, testInputValue(s, a.Name, a.Description, a.Type, a.DefaultValue))
+				walk(a.Type.Name())
+			}
+			fields = append(fields, map[string]any{
+				"name": f.Name, "description": f.Description, "args": args, "type": testTypeRef(s, f.Type),
+			})
+		}
+		for _, v := range d.EnumValues {
+			enums = append(enums, map[string]any{"name": v.Name, "description": v.Description})
+		}
+		switch d.Kind {
+		case ast.Object, ast.Interface:
+			item["fields"] = fields
+		case ast.InputObject:
+			item["inputFields"] = inputs
+		case ast.Enum:
+			item["enumValues"] = enums
+		}
+		types = append(types, item)
+	}
+
+	if s.Query != nil {
+		walk(s.Query.Name)
+	}
+	if s.Mutation != nil {
+		walk(s.Mutation.Name)
+	}
+	for n := range s.Types {
+		walk(n)
+	}
+
+	rootName := func(d *ast.Definition) any {
+		if d == nil {
+			return nil
+		}
+		return map[string]any{"name": d.Name}
+	}
+
+	payload := map[string]any{
+		"data": map[string]any{
+			"__schema": map[string]any{
+				"queryType":        rootName(s.Query),
+				"mutationType":     rootName(s.Mutation),
+				"subscriptionType": rootName(s.Subscription),
+				"types":            types,
+			},
+		},
+	}
+	b, _ := json.Marshal(payload)
+	return b
+}
+
+// Read GraphQL schemas directly from the gql directory or MMQ_CONTRACT_DIR.
 func deviceContract(t *testing.T, broker string) ([]byte, []byte) {
 	t.Helper()
 	contractOnce.Do(func() {
 		contractFiles = map[string][]byte{}
 		dir := os.Getenv("MMQ_CONTRACT_DIR")
-		if dir == "" {
-			var err error
-			dir, err = os.MkdirTemp("", "mmq-contract-")
-			if err != nil {
-				contractError = err
-				return
+		if dir != "" {
+			for _, name := range []string{"main", "edge"} {
+				for _, file := range []string{"introspection.json", "schema.graphql"} {
+					data, err := os.ReadFile(filepath.Join(dir, name, file))
+					if err != nil {
+						contractError = err
+						return
+					}
+					contractFiles[name+"/"+file] = data
+				}
 			}
-			defer os.RemoveAll(dir)
-			root, err := filepath.Abs("..")
-			if err != nil {
-				contractError = err
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
-			cmd := exec.CommandContext(ctx, "bash", filepath.Join(root, "scripts/graphql-contract.sh"),
-				"--main-root", filepath.Join(root, "../main"), "--edge-root", filepath.Join(root, "../edge"),
-				"--cli-root", root, "--output-dir", dir)
-			if output, err := cmd.CombinedOutput(); err != nil {
-				contractError = fmt.Errorf("generate schemas from sibling main/edge checkouts, or set MMQ_CONTRACT_DIR to existing contracts: %w\n%s", err, output)
-				return
+			return
+		}
+
+		// Locate the gql directory containing main.gql and edge.gql
+		gqlDir := ""
+		for _, cand := range []string{"../gql", "gql", "../../gql"} {
+			if _, err := os.Stat(filepath.Join(cand, "main.gql")); err == nil {
+				gqlDir = cand
+				break
 			}
 		}
+		if gqlDir == "" {
+			contractError = fmt.Errorf("cannot find gql directory containing main.gql and edge.gql")
+			return
+		}
+
 		for _, name := range []string{"main", "edge"} {
-			for _, file := range []string{"introspection.json", "schema.graphql"} {
-				key := name + "/" + file
-				data, err := os.ReadFile(filepath.Join(dir, name, file))
-				if err != nil {
-					contractError = err
-					return
-				}
-				contractFiles[key] = data
+			sdlBytes, err := os.ReadFile(filepath.Join(gqlDir, name+".gql"))
+			if err != nil {
+				contractError = fmt.Errorf("failed to read %s.gql: %w", name, err)
+				return
 			}
+			schema, err := gqlparser.LoadSchema(&ast.Source{Name: name, Input: string(sdlBytes)})
+			if err != nil {
+				contractError = fmt.Errorf("failed to parse %s.gql schema: %w", name, err)
+				return
+			}
+			introJSON := buildTestIntrospection(schema)
+			contractFiles[name+"/schema.graphql"] = sdlBytes
+			contractFiles[name+"/introspection.json"] = introJSON
 		}
 	})
 	if contractError != nil {
