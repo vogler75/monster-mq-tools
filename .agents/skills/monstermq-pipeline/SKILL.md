@@ -33,14 +33,19 @@ cd mbp && ./bin/mbp
 
 ### Keybindings in TUI
 
-- `[↑/↓]` or `[j/k]`: Select component
+- `[↑/↓]` or `[j/k]`: Navigate component menu (or scroll log lines when log is focused)
+- `[Tab]`: Toggle focus between Component Menu & Live Log Viewer
+- `[PgUp/PgDn]`: Scroll log viewer pages up/down
 - `[b]`: Open build target selector dialog for selected component
 - `[B]`: Batch build all components sequentially
+- `[u]`: Git pull latest updates for selected component (streams logs directly to viewer)
+- `[U]`: Batch Git pull all components sequentially
 - `[p]`: Open publish confirmation dialog for selected component
 - `[c]`: Clean build outputs
-- `[g]`: Run background `git fetch` to check for updates on remote
+- `[g]`: Run background `git fetch` across all repositories to check for updates
 - `[r]`: Refresh statuses
 - `[f]` or `[l]`: Toggle full-screen live log viewer
+- `[Esc]`: Return to Component Menu from log view, fullscreen, or dialog
 - `[a]`: Toggle log autoscroll
 - `[x]` or `[Ctrl+C]`: Cancel active build task
 - `[?]`: Show help modal
@@ -58,6 +63,17 @@ cd mbp && ./bin/mbp
 
 # Output full JSON model
 ./mbp/bin/mbp status --json
+```
+
+### Pulling Git Updates
+
+```bash
+# Pull specific component
+./mbp/bin/mbp pull explorer
+./mbp/bin/mbp pull edge
+
+# Pull all repositories sequentially
+./mbp/bin/mbp pull all
 ```
 
 ### Building Components

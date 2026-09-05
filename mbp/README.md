@@ -54,14 +54,19 @@ Launch the interactive dashboard:
 
 | Shortcut | Description |
 |---|---|
-| `↑` / `↓` or `k` / `j` | Move selection between components |
+| `↑` / `↓` or `k` / `j` | Navigate component menu (or scroll log lines when log viewer is focused) |
+| `Tab` | Toggle active focus between Component Menu and Live Log Viewer |
+| `PgUp` / `PgDn` | Scroll log viewer pages up / down |
 | `b` | Open build target selector dialog for selected component |
 | `B` | Start batch **Build All** sequentially |
+| `u` | Run `git pull` for selected component (streams live logs to viewer) |
+| `U` | Run batch **Pull All** components sequentially |
 | `p` | Open publish confirmation dialog for selected component |
 | `c` | Clean build outputs for selected component |
-| `g` | Run `git fetch` in background & refresh remote statuses |
+| `g` | Run `git fetch` across all repositories in background & refresh statuses |
 | `r` | Refresh component & artifact statuses immediately |
 | `f` or `l` | Toggle full-screen live log viewer |
+| `Esc` | Return to Component Menu from log view, fullscreen, or dialog |
 | `a` | Toggle log autoscroll on / off |
 | `x` / `Ctrl+C` | Cancel / terminate active build process |
 | `?` | Toggle keyboard shortcuts help dialog |
@@ -81,6 +86,17 @@ Launch the interactive dashboard:
 
 # Machine-readable JSON output
 ./bin/mbp status --json
+```
+
+### Pull Git Updates
+
+```bash
+# Pull specific component
+./bin/mbp pull explorer
+./bin/mbp pull edge
+
+# Pull all repositories sequentially
+./bin/mbp pull all
 ```
 
 ### Build Components

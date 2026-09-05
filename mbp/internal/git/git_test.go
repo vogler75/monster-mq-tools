@@ -27,3 +27,12 @@ func TestGetStatusCurrentRepo(t *testing.T) {
 	t.Logf("Repo: %s, Branch: %s, Commit: %s, IsDirty: %v, DirtyCount: %d, Upstream: %s, Ahead: %d, Behind: %d",
 		wd, st.Branch, st.Commit, st.IsDirty, st.DirtyFilesCount, st.Upstream, st.Ahead, st.Behind)
 }
+
+func TestPull(t *testing.T) {
+	// Pull on nonexistent dir should return error
+	_, err := Pull(t.Context(), "/nonexistent-path-mbp-test")
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+

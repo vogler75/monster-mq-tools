@@ -15,6 +15,7 @@ const (
 	StatusOutdated   BuildStatus = "Outdated"
 	StatusBuilding   BuildStatus = "Building"
 	StatusPublishing BuildStatus = "Publishing"
+	StatusPulling    BuildStatus = "Pulling"
 	StatusSuccess    BuildStatus = "Success"
 	StatusFailed     BuildStatus = "Failed"
 )

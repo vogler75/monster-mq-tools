@@ -28,6 +28,9 @@ func main() {
 		case "build":
 			runBuildCmd(os.Args[2:])
 			return
+		case "pull":
+			runPullCmd(os.Args[2:])
+			return
 		case "publish":
 			runPublishCmd(os.Args[2:])
 			return
@@ -54,6 +57,7 @@ USAGE:
   mbp [flags]                    Launch interactive Terminal UI (default)
   mbp status [flags]             Print status table of all components to stdout
   mbp build <comp|all> [flags]   Build a component or all components headlessly
+  mbp pull <comp|all> [flags]    Pull latest git updates for component or all
   mbp publish <comp> [flags]     Publish release assets headlessly
   mbp clean <comp|all> [flags]   Clean build artifacts
   mbp version                    Display version
@@ -217,6 +221,73 @@ func runBuildCmd(args []string) {
 
 	fmt.Printf("Building %s (%s) using target '%s': %s %s\n\n", comp.Name, comp.ID, target.Name, target.Command, strings.Join(target.Args, " "))
 	if err := executeTaskCLI(comp.ID, "build", target, comp.Directory); err != nil {
+		os.Exit(1)
+	}
+}
+
+func runPullCmd(args []string) {
+	fs := flag.NewFlagSet("pull", flag.ExitOnError)
+	rootFlag := fs.String("root", "", "Path to monster repositories root")
+	_ = fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to pull (main, edge, dashboard, explorer, tools) or 'all'\n")
+		os.Exit(1)
+	}
+
+	targetComp := fs.Arg(0)
+	rootDir, err := component.FindMonsterRoot(*rootFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	comps, err := component.LoadAndRefreshAll(rootDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	pullTarget := component.Target{
+		ID:      "git-pull",
+		Name:    "Git Pull",
+		Command: "git",
+		Args:    []string{"pull"},
+	}
+
+	if targetComp == "all" {
+		var failed []string
+		for _, c := range comps {
+			if !c.Git.IsRepo {
+				continue
+			}
+			fmt.Printf("\n=== Pulling %s (%s) ===\n", c.Name, c.ID)
+			if err := executeTaskCLI(c.ID, "pull", pullTarget, c.Directory); err != nil {
+				fmt.Fprintf(os.Stderr, "Git pull failed for %s: %v\n", c.ID, err)
+				failed = append(failed, c.ID)
+			}
+		}
+		if len(failed) > 0 {
+			fmt.Fprintf(os.Stderr, "\n✘ Git pull failed for: %s\n", strings.Join(failed, ", "))
+			os.Exit(1)
+		}
+		fmt.Println("\n✔ All repositories pulled successfully!")
+		return
+	}
+
+	comp, err := component.FindComponent(comps, targetComp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !comp.Git.IsRepo {
+		fmt.Fprintf(os.Stderr, "Error: Component '%s' (%s) is not a git repository\n", comp.ID, comp.Directory)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Pulling %s (%s)...\n\n", comp.Name, comp.ID)
+	if err := executeTaskCLI(comp.ID, "pull", pullTarget, comp.Directory); err != nil {
 		os.Exit(1)
 	}
 }

@@ -79,6 +79,11 @@ var (
 			Foreground(ColorSecondary).
 			Bold(true)
 
+	BadgePulling = lipgloss.NewStyle().
+			Foreground(ColorWarning).
+			Bold(true)
+
+
 	BadgeClean = lipgloss.NewStyle().
 			Foreground(ColorSuccess)
 

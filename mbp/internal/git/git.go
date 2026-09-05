@@ -96,12 +96,14 @@ func GetStatusWithContext(ctx context.Context, repoDir string) Status {
 	return st
 }
 
-// Fetch executes git fetch for the repoDir to update remote tracking branches.
-func Fetch(ctx context.Context, repoDir string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "fetch", "--prune")
+// Pull executes git pull for the repoDir to pull latest upstream changes.
+func Pull(ctx context.Context, repoDir string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "pull")
 	out, err := cmd.CombinedOutput()
+	outStr := strings.TrimSpace(string(out))
 	if err != nil {
-		return fmt.Errorf("git fetch failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		return outStr, fmt.Errorf("git pull failed in %s: %w (output: %s)", repoDir, err, outStr)
 	}
-	return nil
+	return outStr, nil
 }
+

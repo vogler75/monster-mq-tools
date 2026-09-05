@@ -180,6 +180,10 @@ Located in [`mbp/`](mbp). Provides an interactive Terminal UI and headless CLI t
 # Print component status overview
 ./mbp/bin/mbp status
 
+# Pull latest git updates
+./mbp/bin/mbp pull explorer
+./mbp/bin/mbp pull all
+
 # Headlessly build a component or all components
 ./mbp/bin/mbp build edge
 ./mbp/bin/mbp build all

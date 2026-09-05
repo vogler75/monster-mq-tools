@@ -92,14 +92,19 @@ func RenderModal(d *DialogModel, width, height int) string {
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("📖  MBP KEYBOARD SHORTCUTS"))
 		content.WriteString("\n\n")
 		shortcuts := [][]string{
-			{"[↑/↓] or [j/k]", "Navigate component list"},
+			{"[↑/↓] or [j/k]", "Navigate component list (when menu active)"},
+			{"[Tab]", "Toggle focus between Component Menu & Log Viewer"},
+			{"[↑/↓] or [j/k]", "Scroll log lines (when log focused or fullscreen)"},
+			{"[PgUp/PgDn]", "Scroll log output pages up/down"},
 			{"[b]", "Build selected component (opens target picker)"},
 			{"[B]", "Build ALL components sequentially"},
+			{"[u]", "Git pull latest updates for selected component"},
+			{"[U]", "Git pull latest updates for ALL components"},
 			{"[p]", "Publish selected component to GitHub / Docker"},
 			{"[c]", "Clean build outputs for selected component"},
-			{"[g]", "Git fetch origin & refresh statuses"},
 			{"[r]", "Refresh status without fetching remote"},
-			{"[f] or [l]", "Toggle full-screen live log viewer"},
+			{"[Enter] / [f]", "Open / toggle full-screen live log viewer"},
+			{"[Esc]", "Back to Menu from log view, fullscreen, or dialog"},
 			{"[a]", "Toggle log autoscroll on/off"},
 			{"[x] / [Ctrl+C]", "Cancel / kill running build process"},
 			{"[?]", "Toggle this help dialog"},

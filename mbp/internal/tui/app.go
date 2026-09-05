@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/vogler75/monster-mq-tools/mbp/internal/component"
-	"github.com/vogler75/monster-mq-tools/mbp/internal/git"
 	"github.com/vogler75/monster-mq-tools/mbp/internal/runner"
 )
 
@@ -20,22 +20,37 @@ type queuedTask struct {
 	Action      string
 }
 
+type FocusArea int
+
+const (
+	FocusMenu FocusArea = iota
+	FocusLogs
+)
+
+type ComponentLogState struct {
+	YOffset    int
+	AutoScroll bool
+	Task       *runner.Task
+}
+
 // AppModel is the primary Bubble Tea model for MBP.
 type AppModel struct {
-	RootDir       string
-	Components    []*component.Component
-	SelectedIdx   int
-	LogViewer     LogViewer
-	Dialog        DialogModel
-	ActiveTask    *runner.Task
-	Queue         []queuedTask
-	Spinner       spinner.Model
+	RootDir        string
+	Components     []*component.Component
+	SelectedIdx    int
+	LogViewer      LogViewer
+	Dialog         DialogModel
+	ActiveTask     *runner.Task
+	ComponentTasks map[string]*runner.Task
+	LogStates      map[string]*ComponentLogState
+	Focus          FocusArea
+	Queue          []queuedTask
+	Spinner        spinner.Model
 
 	Width         int
 	Height        int
 	FullscreenLog bool
 	StatusMsg     string
-	FetchingGit   bool
 }
 
 // Custom Bubble Tea Messages
@@ -46,10 +61,6 @@ type logLineMsg struct {
 
 type taskDoneMsg struct {
 	task *runner.Task
-}
-
-type gitFetchDoneMsg struct {
-	err error
 }
 
 type tickMsg time.Time
@@ -73,14 +84,19 @@ func NewAppModel(rootDir string) (*AppModel, error) {
 
 	lv := NewLogViewer(80, 15)
 
-	return &AppModel{
-		RootDir:     rootDir,
-		Components:  comps,
-		SelectedIdx: 0,
-		LogViewer:   lv,
-		Spinner:     s,
-		Queue:       make([]queuedTask, 0),
-	}, nil
+	m := &AppModel{
+		RootDir:        rootDir,
+		Components:     comps,
+		SelectedIdx:    0,
+		LogViewer:      lv,
+		Spinner:        s,
+		Queue:          make([]queuedTask, 0),
+		ComponentTasks: make(map[string]*runner.Task),
+		LogStates:      make(map[string]*ComponentLogState),
+		Focus:          FocusMenu,
+	}
+	m.updateLogViewerForSelection()
+	return m, nil
 }
 
 func (m *AppModel) Init() tea.Cmd {
@@ -101,6 +117,12 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		cmds = append(cmds, tickCmd())
+		if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
+			sel := m.selectedComponent()
+			if sel != nil && m.ActiveTask.ComponentID == sel.ID {
+				m.LogViewer.UpdateContent()
+			}
+		}
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -108,7 +130,8 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 	case logLineMsg:
-		if m.ActiveTask != nil && m.ActiveTask.ID == msg.taskID {
+		sel := m.selectedComponent()
+		if sel != nil && sel.ID == msg.taskID {
 			m.LogViewer.UpdateContent()
 		}
 
@@ -121,29 +144,19 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.startTaskCmd(next.ComponentID, next.Action, next.Target))
 		}
 
-	case gitFetchDoneMsg:
-		m.FetchingGit = false
-		if msg.err != nil {
-			m.StatusMsg = fmt.Sprintf("Git fetch failed: %v", msg.err)
-		} else {
-			m.StatusMsg = "Git fetch complete. Statuses updated."
-			for _, c := range m.Components {
-				component.RefreshStatus(c)
-			}
-		}
-
 	case tea.KeyMsg:
 		cmd := m.handleKeyPress(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	}
 
-	// Propagate viewport updates if log viewer active
-	var vpCmd tea.Cmd
-	m.LogViewer.Viewport, vpCmd = m.LogViewer.Viewport.Update(msg)
-	if vpCmd != nil {
-		cmds = append(cmds, vpCmd)
+	case tea.MouseMsg:
+		// Forward mouse wheel scrolling to viewport
+		var vpCmd tea.Cmd
+		m.LogViewer.Viewport, vpCmd = m.LogViewer.Viewport.Update(msg)
+		if vpCmd != nil {
+			cmds = append(cmds, vpCmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -155,7 +168,7 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	// If modal is active
 	if m.Dialog.Type != DialogNone {
 		switch key {
-		case "esc":
+		case "esc", "q":
 			m.Dialog.Type = DialogNone
 			return nil
 		case "up", "k":
@@ -174,11 +187,22 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
+	// Tab switches focus between menu table and log view
+	if key == "tab" && !m.FullscreenLog {
+		if m.Focus == FocusMenu {
+			m.Focus = FocusLogs
+		} else {
+			m.Focus = FocusMenu
+		}
+		m.updateLogViewerForSelection()
+		return nil
+	}
+
 	// Normal View Keybindings
 	switch key {
 	case "q":
 		if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
-			m.StatusMsg = "Task running! Press 'k' to cancel task first, or Ctrl+C to force exit."
+			m.StatusMsg = "Task running! Press 'x' to cancel task first, or Ctrl+C to force exit."
 			return nil
 		}
 		return tea.Quit
@@ -192,14 +216,77 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		return tea.Quit
 
 	case "up", "k":
+		if m.Focus == FocusLogs || m.FullscreenLog {
+			m.LogViewer.Viewport.LineUp(1)
+			m.LogViewer.AutoScroll = false
+			return nil
+		}
 		if m.SelectedIdx > 0 {
+			m.saveCurrentLogState()
 			m.SelectedIdx--
+			m.updateLogViewerForSelection()
 		}
 
 	case "down", "j":
-		if m.SelectedIdx < len(m.Components)-1 {
-			m.SelectedIdx++
+		if m.Focus == FocusLogs || m.FullscreenLog {
+			m.LogViewer.Viewport.LineDown(1)
+			return nil
 		}
+		if m.SelectedIdx < len(m.Components)-1 {
+			m.saveCurrentLogState()
+			m.SelectedIdx++
+			m.updateLogViewerForSelection()
+		}
+
+	case "pgup":
+		m.LogViewer.Viewport.ViewUp()
+		m.LogViewer.AutoScroll = false
+		return nil
+
+	case "pgdown":
+		m.LogViewer.Viewport.ViewDown()
+		return nil
+
+	case "home":
+		if m.Focus == FocusLogs || m.FullscreenLog {
+			m.LogViewer.Viewport.GotoTop()
+			m.LogViewer.AutoScroll = false
+			return nil
+		}
+
+	case "end":
+		if m.Focus == FocusLogs || m.FullscreenLog {
+			m.LogViewer.Viewport.GotoBottom()
+			m.LogViewer.AutoScroll = true
+			return nil
+		}
+
+	case "u":
+		// Git pull selected component
+		sel := m.selectedComponent()
+		if sel == nil {
+			return nil
+		}
+		if !sel.Git.IsRepo {
+			m.StatusMsg = fmt.Sprintf("%s is not a git repository.", sel.Name)
+			return nil
+		}
+		if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
+			m.StatusMsg = "A task is already running! Please wait or cancel it."
+			return nil
+		}
+		target := component.Target{
+			ID:      "git-pull",
+			Name:    "Git Pull",
+			Command: "git",
+			Args:    []string{"pull"},
+		}
+		m.StatusMsg = fmt.Sprintf("Pulling latest changes for %s...", sel.Name)
+		return m.startTaskCmd(sel.ID, "pull", target)
+
+	case "U":
+		// Git pull ALL components sequentially
+		return m.triggerPullAll()
 
 	case "b":
 		// Build selected
@@ -245,30 +332,31 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			SelectedIdx: 0,
 		}
 
-	case "g":
-		// Fetch git origin
-		if m.FetchingGit {
-			return nil
-		}
-		m.FetchingGit = true
-		m.StatusMsg = "Fetching git remotes in background..."
-		return m.gitFetchCmd()
-
 	case "r":
 		// Refresh status
 		for _, c := range m.Components {
 			component.RefreshStatus(c)
 		}
 		m.StatusMsg = "Component statuses refreshed."
+		m.updateLogViewerForSelection()
 
 	case "f", "l":
 		// Toggle fullscreen log view
 		m.FullscreenLog = !m.FullscreenLog
+		if m.FullscreenLog {
+			m.Focus = FocusLogs
+		} else {
+			m.Focus = FocusMenu
+		}
 		m.resizeLayout()
+		m.updateLogViewerForSelection()
 
 	case "a":
 		// Toggle log autoscroll
 		m.LogViewer.AutoScroll = !m.LogViewer.AutoScroll
+		if m.LogViewer.AutoScroll {
+			m.LogViewer.Viewport.GotoBottom()
+		}
 
 	case "x", "X":
 		// Cancel active task
@@ -276,6 +364,37 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			m.ActiveTask.Cancel()
 			m.StatusMsg = "Cancelling task..."
 		}
+
+	case "esc":
+		// Go back from fullscreen logs or focus log view, or dismiss status message
+		if m.FullscreenLog {
+			m.FullscreenLog = false
+			m.Focus = FocusMenu
+			m.resizeLayout()
+			m.updateLogViewerForSelection()
+			return nil
+		}
+		if m.Focus == FocusLogs {
+			m.Focus = FocusMenu
+			m.updateLogViewerForSelection()
+			return nil
+		}
+		if m.StatusMsg != "" {
+			m.StatusMsg = ""
+			return nil
+		}
+
+	case "enter":
+		// Enter toggles fullscreen log view for selected component
+		m.FullscreenLog = !m.FullscreenLog
+		if m.FullscreenLog {
+			m.Focus = FocusLogs
+		} else {
+			m.Focus = FocusMenu
+		}
+		m.resizeLayout()
+		m.updateLogViewerForSelection()
+		return nil
 
 	case "?":
 		m.Dialog = DialogModel{
@@ -291,6 +410,49 @@ func (m *AppModel) selectedComponent() *component.Component {
 		return m.Components[m.SelectedIdx]
 	}
 	return nil
+}
+
+func (m *AppModel) isLogFocused() bool {
+	return m.Focus == FocusLogs || m.FullscreenLog
+}
+
+func (m *AppModel) getOrCreateLogState(id string) *ComponentLogState {
+	s, ok := m.LogStates[id]
+	if !ok {
+		s = &ComponentLogState{
+			AutoScroll: true,
+			YOffset:    0,
+		}
+		m.LogStates[id] = s
+	}
+	return s
+}
+
+func (m *AppModel) saveCurrentLogState() {
+	if sel := m.selectedComponent(); sel != nil {
+		state := m.getOrCreateLogState(sel.ID)
+		state.YOffset = m.LogViewer.Viewport.YOffset
+		state.AutoScroll = m.LogViewer.AutoScroll
+	}
+}
+
+func (m *AppModel) updateLogViewerForSelection() {
+	sel := m.selectedComponent()
+	if sel == nil {
+		m.LogViewer.SetComponent(nil, nil, m.isLogFocused())
+		return
+	}
+
+	state := m.getOrCreateLogState(sel.ID)
+	task := m.ComponentTasks[sel.ID]
+	state.Task = task
+
+	m.LogViewer.SetComponent(sel, task, m.isLogFocused())
+	m.LogViewer.AutoScroll = state.AutoScroll
+	m.LogViewer.Viewport.YOffset = state.YOffset
+	if state.AutoScroll && task != nil {
+		m.LogViewer.Viewport.GotoBottom()
+	}
 }
 
 func (m *AppModel) executeDialogAction() tea.Cmd {
@@ -342,6 +504,40 @@ func (m *AppModel) triggerBuildAll() tea.Cmd {
 	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
 }
 
+func (m *AppModel) triggerPullAll() tea.Cmd {
+	if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
+		m.StatusMsg = "Cannot start Pull All: another task is already running!"
+		return nil
+	}
+
+	m.Queue = nil
+	for _, c := range m.Components {
+		if !c.Git.IsRepo {
+			continue
+		}
+		m.Queue = append(m.Queue, queuedTask{
+			ComponentID: c.ID,
+			Target: component.Target{
+				ID:      "git-pull",
+				Name:    "Git Pull",
+				Command: "git",
+				Args:    []string{"pull"},
+			},
+			Action: "pull",
+		})
+	}
+
+	if len(m.Queue) == 0 {
+		m.StatusMsg = "No git repositories available to pull."
+		return nil
+	}
+
+	first := m.Queue[0]
+	m.Queue = m.Queue[1:]
+	m.StatusMsg = fmt.Sprintf("Started Pull All sequence (%d repositories queued).", len(m.Queue)+1)
+	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
+}
+
 func (m *AppModel) startTaskCmd(componentID, action string, target component.Target) tea.Cmd {
 	comp, err := component.FindComponent(m.Components, componentID)
 	if err != nil {
@@ -359,12 +555,19 @@ func (m *AppModel) startTaskCmd(componentID, action string, target component.Tar
 	)
 
 	m.ActiveTask = task
-	m.LogViewer.SetTask(task)
+	m.ComponentTasks[componentID] = task
+
+	sel := m.selectedComponent()
+	if sel != nil && sel.ID == componentID {
+		m.LogViewer.SetComponent(comp, task, m.isLogFocused())
+	}
 
 	if action == "build" {
 		comp.Status = component.StatusBuilding
 	} else if action == "publish" {
 		comp.Status = component.StatusPublishing
+	} else if action == "pull" {
+		comp.Status = component.StatusPulling
 	}
 
 	return func() tea.Msg {
@@ -390,53 +593,63 @@ func (m *AppModel) handleTaskDone(t *runner.Task) {
 	comp, err := component.FindComponent(m.Components, t.ComponentID)
 	if err == nil {
 		component.RefreshStatus(comp)
-		comp.LastBuildTime = t.EndTime
-		comp.LastBuildDuration = t.Duration
+		if t.Action == "build" {
+			comp.LastBuildTime = t.EndTime
+			comp.LastBuildDuration = t.Duration
+		}
 
 		if t.Status == runner.TaskSuccess {
-			comp.Status = component.StatusSuccess
+			if t.Action == "build" {
+				comp.Status = component.StatusSuccess
+			}
 			m.StatusMsg = fmt.Sprintf("✔ %s %s finished successfully in %s", strings.ToUpper(t.Action), comp.Name, t.Duration.Round(time.Second))
 		} else if t.Status == runner.TaskCancelled {
-			comp.Status = component.StatusOutdated
+			if t.Action == "build" {
+				comp.Status = component.StatusOutdated
+			}
 			m.StatusMsg = fmt.Sprintf("⊘ %s cancelled.", comp.Name)
 		} else {
-			comp.Status = component.StatusFailed
-			comp.LastError = t.Error
+			if t.Action == "build" {
+				comp.Status = component.StatusFailed
+				comp.LastError = t.Error
+			}
 			m.StatusMsg = fmt.Sprintf("✘ %s failed (exit %d): %s", comp.Name, t.ExitCode, t.Error)
 		}
 	}
-	m.LogViewer.UpdateContent()
-}
-
-func (m *AppModel) gitFetchCmd() tea.Cmd {
-	comps := m.Components
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
-		var lastErr error
-		for _, c := range comps {
-			if c.Git.IsRepo {
-				if err := git.Fetch(ctx, c.Directory); err != nil {
-					lastErr = err
-				}
-			}
-		}
-		return gitFetchDoneMsg{err: lastErr}
+	sel := m.selectedComponent()
+	if sel != nil && sel.ID == t.ComponentID {
+		m.LogViewer.UpdateContent()
 	}
 }
 
 func (m *AppModel) resizeLayout() {
-	w := max(m.Width, 80)
-	h := max(m.Height, 24)
+	w := max(m.Width, 60)
+	h := max(m.Height, 16)
 
-	if m.FullscreenLog {
-		m.LogViewer.SetSize(w-4, h-6)
-	} else {
-		// Table gets ~8-10 rows, log gets remainder
-		logH := max(h-14, 8)
-		m.LogViewer.SetSize(w-4, logH)
+	headerHeight := 3
+
+	footerHeight := 1
+	if m.StatusMsg != "" {
+		footerHeight = 2
 	}
+
+	tableHeight := 0
+	if !m.FullscreenLog {
+		// Border top (1) + Border bottom (1) + Header (1) + Separator (1) + len(m.Components)
+		tableHeight = 4 + len(m.Components)
+	}
+
+	logPaneOverhead := 3 // Border top (1) + Border bottom (1) + Log Title (1)
+
+	fixedLines := headerHeight + tableHeight + logPaneOverhead + footerHeight
+
+	logH := h - fixedLines
+	if logH < 3 {
+		logH = 3
+	}
+
+	innerW := max(w-6, 50)
+	m.LogViewer.SetSize(innerW, logH)
 }
 
 func (m *AppModel) View() string {
@@ -444,23 +657,33 @@ func (m *AppModel) View() string {
 		return "Initializing MBP..."
 	}
 
+	m.resizeLayout()
+
 	var sb strings.Builder
 
 	// 1. Header Banner
 	sb.WriteString(m.renderHeader())
 	sb.WriteString("\n")
 
+	// 2. Component Status Table
 	if !m.FullscreenLog {
-		// 2. Component Status Table
-		tableBox := StylePane.Width(m.Width - 4).Render(RenderComponentTable(m.Components, m.SelectedIdx, m.Width-6))
+		tableStyle := StylePane.Copy().UnsetHeight()
+		if m.Focus == FocusMenu {
+			tableStyle = StylePaneActive.Copy().UnsetHeight()
+		}
+		tableBox := tableStyle.Width(m.Width - 4).Render(RenderComponentTable(m.Components, m.SelectedIdx, m.Width-6))
 		sb.WriteString(tableBox)
 		sb.WriteString("\n")
 	}
 
 	// 3. Log Output Pane
-	logHeader := m.LogViewer.RenderHeader(m.Width - 6)
+	logStyle := StylePane.Copy().UnsetHeight()
+	if m.Focus == FocusLogs || m.FullscreenLog {
+		logStyle = StylePaneActive.Copy().UnsetHeight()
+	}
+	logHeader := m.LogViewer.RenderHeader(m.Width-6, m.isLogFocused())
 	logBody := m.LogViewer.Viewport.View()
-	logPane := StylePane.Width(m.Width - 4).Render(logHeader + "\n" + logBody)
+	logPane := logStyle.Width(m.Width - 4).Render(logHeader + "\n" + logBody)
 	sb.WriteString(logPane)
 	sb.WriteString("\n")
 
@@ -477,8 +700,14 @@ func (m *AppModel) View() string {
 }
 
 func (m *AppModel) renderHeader() string {
+	innerW := max(m.Width-6, 40)
 	title := StyleTitle.Render(" MBP ") + " " + StyleSubtitle.Render("MonsterMQ Build Pipeline")
-	pathStr := StyleDim.Render(fmt.Sprintf("Root: %s", m.RootDir))
+
+	rootText := fmt.Sprintf("Root: %s", m.RootDir)
+	if lipgloss.Width(rootText) > 28 && m.Width < 100 {
+		rootText = fmt.Sprintf("Root: .../%s", filepath.Base(m.RootDir))
+	}
+	pathStr := StyleDim.Render(rootText)
 
 	// Summary badges
 	builtCount := 0
@@ -501,19 +730,30 @@ func (m *AppModel) renderHeader() string {
 		BadgeBuilt.Render(fmt.Sprintf("Built: %d", builtCount)),
 		BadgeOutdated.Render(fmt.Sprintf("Outdated: %d", outdatedCount)),
 	)
-	if behindCount > 0 {
+	if behindCount > 0 && m.Width >= 95 {
 		stats += " | " + BadgeBehind.Render(fmt.Sprintf("Git Updates: %d", behindCount))
 	}
 
-	if m.FetchingGit {
-		stats += " | " + m.Spinner.View() + " " + StyleDim.Render("Fetching git...")
+	left := title
+	if m.Width >= 80 {
+		left += "  " + pathStr
+	}
+	right := stats
+
+	leftW := lipgloss.Width(left)
+	rightW := lipgloss.Width(right)
+	if leftW+rightW+2 > innerW {
+		right = fmt.Sprintf("%s | %s", BadgeBuilt.Render(fmt.Sprintf("B:%d", builtCount)), BadgeOutdated.Render(fmt.Sprintf("O:%d", outdatedCount)))
+		rightW = lipgloss.Width(right)
 	}
 
-	left := title + "  " + pathStr
-	right := stats
-	space := max(m.Width-lipgloss.Width(left)-lipgloss.Width(right)-4, 1)
+	space := max(innerW-leftW-rightW, 1)
+	line := left + strings.Repeat(" ", space) + right
+	if lipgloss.Width(line) > innerW {
+		line = truncateVisible(line, innerW)
+	}
 
-	return StyleHeader.Width(m.Width - 4).Render(left + strings.Repeat(" ", space) + right)
+	return StyleHeader.Width(m.Width - 4).Render(line)
 }
 
 func (m *AppModel) renderFooter() string {
@@ -522,17 +762,56 @@ func (m *AppModel) renderFooter() string {
 		statusLine = lipgloss.NewStyle().Foreground(ColorWarning).Render("ℹ " + m.StatusMsg)
 	}
 
-	keys := []string{
-		"[↑/↓] Select",
-		"[b] Build",
-		"[B] Build All",
-		"[p] Publish",
-		"[c] Clean",
-		"[g] Git Fetch",
-		"[f] Full Log",
-		"[x] Kill",
-		"[?] Help",
-		"[q] Quit",
+	var keys []string
+	if m.FullscreenLog {
+		keys = []string{
+			"[Esc/f] Back to Menu",
+			"[↑/↓] Scroll",
+			"[PgUp/PgDn] Page",
+			"[a] Autoscroll",
+			"[x] Cancel Task",
+			"[?] Help",
+			"[q] Quit",
+		}
+	} else if m.Focus == FocusLogs {
+		keys = []string{
+			"[Tab/Esc] Back to Menu",
+			"[↑/↓] Scroll Log",
+			"[PgUp/PgDn] Page",
+			"[a] Autoscroll",
+			"[f] Fullscreen",
+			"[x] Cancel Task",
+			"[?] Help",
+			"[q] Quit",
+		}
+	} else {
+		if m.Width < 105 {
+			keys = []string{
+				"[↑/↓] Select",
+				"[Tab] Focus Log",
+				"[b] Build",
+				"[u] Pull",
+				"[p] Publish",
+				"[f] Full Log",
+				"[?] Help",
+				"[q] Quit",
+			}
+		} else {
+			keys = []string{
+				"[↑/↓] Select",
+				"[Tab] Focus Log",
+				"[b] Build",
+				"[B] Build All",
+				"[u] Pull",
+				"[U] Pull All",
+				"[p] Publish",
+				"[c] Clean",
+				"[f] Full Log",
+				"[x] Kill",
+				"[?] Help",
+				"[q] Quit",
+			}
+		}
 	}
 
 	var formattedKeys []string
