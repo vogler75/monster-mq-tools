@@ -2409,7 +2409,18 @@ func zipDirectory(sourceDir string) ([]byte, error) {
 			return nil
 		}
 
+		// Exclude .git directory and any .git files
+		if info.IsDir() && info.Name() == ".git" {
+			return filepath.SkipDir
+		}
+		if info.Name() == ".git" {
+			return nil
+		}
+
 		zipPath := filepath.ToSlash(relPath)
+		if strings.HasPrefix(zipPath, ".git/") || strings.Contains(zipPath, "/.git/") {
+			return nil
+		}
 
 		header, err := zip.FileInfoHeader(info)
 		if err != nil {
@@ -2433,9 +2444,10 @@ func zipDirectory(sourceDir string) ([]byte, error) {
 			if err != nil {
 				return err
 			}
-			defer file.Close()
-			if _, err := io.Copy(w, file); err != nil {
-				return err
+			_, copyErr := io.Copy(w, file)
+			_ = file.Close()
+			if copyErr != nil {
+				return copyErr
 			}
 		}
 		return nil
@@ -2509,8 +2521,11 @@ func runImportHmiZip(ctx context.Context, client *Client, args []string) error {
 	if len(args) < 1 || hasHelpFlag(args) {
 		fmt.Println("Usage: mmq importHmiZip <file.zip|directory> [dashboard-name] [options]")
 		fmt.Println("       mmq importHmiZip <dashboard-name> <file.zip|directory> [options]")
+		fmt.Println("       mmq hmi import <file.zip|directory> [dashboard-name] [options]")
+		fmt.Println("       mmq hmi upload <file.zip|directory> [dashboard-name] [options]")
 		fmt.Println()
 		fmt.Println("Upload and deploy an HMI web dashboard from a binary zip file or local directory.")
+		fmt.Println("Note: when uploading a directory, .git directory and metadata are automatically excluded.")
 		fmt.Println()
 		fmt.Println("Arguments:")
 		fmt.Println("  <file.zip|directory>     Path to the .zip file package or folder to auto-zip (required)")

@@ -30,7 +30,7 @@ The included [`example/`](example/) dashboard is a fully functional industrial w
 
 ## 📦 Deploying to MonsterMQ with `mmq`
 
-The `mmq` command-line tool allows you to upload local directories or ZIP packages directly to a running MonsterMQ broker. When passing a directory, `mmq` automatically packages the files into an in-memory ZIP bundle and deploys it via GraphQL.
+The `mmq` command-line tool allows you to upload local directories or ZIP packages directly to a running MonsterMQ broker. When passing a directory, `mmq` automatically packages the files into an in-memory ZIP bundle (excluding `.git` directory and metadata) and deploys it via GraphQL. You can also use `mmq hmi upload` or `mmq uploadHmiZip` as aliases.
 
 ### 1. Upload & Deploy Example HMI
 

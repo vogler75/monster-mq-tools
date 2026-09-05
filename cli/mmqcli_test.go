@@ -761,6 +761,17 @@ func TestRunImportHmiZipFromDirectory(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(hmiSrcDir, "index.html"), []byte("<h1>Hello HMI</h1>"), 0644)
 	_ = os.WriteFile(filepath.Join(hmiSrcDir, "css", "style.css"), []byte("body { color: red; }"), 0644)
 
+	// Create .git directory and metadata files to verify they are excluded
+	_ = os.MkdirAll(filepath.Join(hmiSrcDir, ".git", "objects"), 0755)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, ".git", "config"), []byte("[core]\n"), 0644)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0644)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, ".git", "objects", "sample.blob"), []byte("blob data"), 0644)
+
+	// Create nested submodule .git directory and legitimate files
+	_ = os.MkdirAll(filepath.Join(hmiSrcDir, "submodule", ".git"), 0755)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, "submodule", ".git", "config"), []byte("[core]\n"), 0644)
+	_ = os.WriteFile(filepath.Join(hmiSrcDir, "submodule", "app.js"), []byte("console.log('test');"), 0644)
+
 	var capturedVars map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -780,7 +791,7 @@ func TestRunImportHmiZipFromDirectory(t *testing.T) {
 	client := NewClient(&ClientConfig{URL: server.URL, Timeout: 5 * time.Second})
 	ctx := context.Background()
 
-	// Upload directory directly
+	// Upload directory directly using importHmiZip
 	err := ExecuteCommand(ctx, client, []string{"importHmiZip", hmiSrcDir})
 	if err != nil {
 		t.Fatalf("importHmiZip on directory failed: %v", err)
@@ -795,7 +806,7 @@ func TestRunImportHmiZipFromDirectory(t *testing.T) {
 		t.Fatalf("expected non-empty zipBase64")
 	}
 
-	// Verify the generated zip contains the files
+	// Verify the generated zip contains the files and excludes .git
 	zipBytes, err := base64.StdEncoding.DecodeString(zipB64)
 	if err != nil {
 		t.Fatalf("failed to decode base64: %v", err)
@@ -809,12 +820,30 @@ func TestRunImportHmiZipFromDirectory(t *testing.T) {
 	fileMap := make(map[string]bool)
 	for _, f := range zr.File {
 		fileMap[f.Name] = true
+		if f.Name == ".git" || strings.HasPrefix(f.Name, ".git/") || strings.Contains(f.Name, "/.git/") || strings.HasSuffix(f.Name, "/.git") {
+			t.Errorf("expected .git to be excluded from zip archive, but found: %s", f.Name)
+		}
 	}
 	if !fileMap["index.html"] {
 		t.Errorf("expected index.html in zip, got %v", fileMap)
 	}
 	if !fileMap["css/style.css"] {
 		t.Errorf("expected css/style.css in zip, got %v", fileMap)
+	}
+	if !fileMap["submodule/app.js"] {
+		t.Errorf("expected submodule/app.js in zip, got %v", fileMap)
+	}
+
+	// Also test alias 'hmi upload'
+	err = ExecuteCommand(ctx, client, []string{"hmi", "upload", hmiSrcDir})
+	if err != nil {
+		t.Fatalf("hmi upload failed: %v", err)
+	}
+
+	// Also test alias 'uploadHmiZip'
+	err = ExecuteCommand(ctx, client, []string{"uploadHmiZip", hmiSrcDir})
+	if err != nil {
+		t.Fatalf("uploadHmiZip failed: %v", err)
 	}
 }
 

@@ -50,7 +50,7 @@ Commands:
   hmi create <name> [options]                 Create a new HMI dashboard definition
   hmi remove <name...>                        Delete and remove one or more HMI dashboards
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
-  importHmiZip <file.zip> [name]              Import & deploy HMI dashboard from a zip
+  importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig                                List enabled broker features & capabilities
   device <command>                           Configure devices (device --help)
 
@@ -193,7 +193,9 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			fmt.Println("       mmq hmi create <name> [options]")
 			fmt.Println("       mmq hmi remove <name1> [name2...]")
 			fmt.Println("       mmq exportHmiZip <name> [output.zip]")
-			fmt.Println("       mmq importHmiZip <file.zip> [name] [--main]")
+			fmt.Println("       mmq importHmiZip <file.zip|dir> [name] [--main]")
+			fmt.Println("       mmq hmi import <file.zip|dir> [name] [--main]")
+			fmt.Println("       mmq hmi upload <file.zip|dir> [name] [--main]")
 			fmt.Println()
 			fmt.Println("Manage deployed HMI dashboards and web packages.")
 			fmt.Println()
@@ -201,8 +203,8 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			fmt.Println("  hmi list                     List all deployed HMI dashboards (alias: hmis)")
 			fmt.Println("  hmi create <name> [options]  Create a new HMI dashboard definition")
 			fmt.Println("  hmi remove <name...>         Delete and remove one or more HMI dashboards")
-			fmt.Println("  exportHmiZip <name>          Export HMI dashboard to a binary zip file")
-			fmt.Println("  importHmiZip <file.zip>      Import & deploy HMI dashboard from a zip package")
+			fmt.Println("  exportHmiZip <name>          Export HMI dashboard to a binary zip file (alias: hmi export, hmi download)")
+			fmt.Println("  importHmiZip <file.zip|dir>  Import & deploy HMI dashboard from a zip package or directory (alias: hmi import, hmi upload)")
 			fmt.Println()
 			fmt.Println("Options:")
 			fmt.Println("  -h, --help                   Show this help text")
@@ -213,9 +215,9 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			return runHmiCreate(ctx, client, actionArgs)
 		case "remove", "delete", "rm":
 			return runHmiRemove(ctx, client, actionArgs)
-		case "export":
+		case "export", "download":
 			return runExportHmiZip(ctx, client, actionArgs)
-		case "import":
+		case "import", "upload":
 			return runImportHmiZip(ctx, client, actionArgs)
 		default:
 			return runHmiList(ctx, client, subargs)
@@ -268,9 +270,9 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 		return runCurrentUser(ctx, client, subargs)
 	case "databaseConnections":
 		return runDatabaseConnections(ctx, client, subargs)
-	case "exportHmiZip":
+	case "exportHmiZip", "downloadHmiZip":
 		return runExportHmiZip(ctx, client, subargs)
-	case "importHmiZip":
+	case "importHmiZip", "uploadHmiZip":
 		return runImportHmiZip(ctx, client, subargs)
 	case "device":
 		return runDevice(ctx, client, subargs)

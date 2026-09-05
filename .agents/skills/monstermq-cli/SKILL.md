@@ -89,8 +89,8 @@ mmq --port 4001 features
 - **`hmis` / `hmi list`**: List deployed HMI web dashboards
 - **`hmi create <name> [options]`**: Create a new HMI dashboard definition
 - **`hmi remove <name...>`**: Delete and remove one or more deployed HMI dashboards
-- **`exportHmiZip <name> [out] [--unzip]`** (or `hmi export`): Export deployed HMI package to binary zip file or extract to folder
-- **`importHmiZip <file.zip|dir> [name] [--main]`** (or `hmi import`): Upload & deploy HMI dashboard from a zip package or local directory
+- **`exportHmiZip <name> [out] [--unzip]`** (or `hmi export`, `hmi download`, `downloadHmiZip`): Export deployed HMI package to binary zip file or extract to folder
+- **`importHmiZip <file.zip|dir> [name] [--main]`** (or `hmi import`, `hmi upload`, `uploadHmiZip`): Upload & deploy HMI dashboard from a zip package or local directory (`.git` directory and metadata are automatically excluded when uploading folders)
 - **`brokerConfig`**: List enabled broker features & capabilities
 
 ### Device Configuration for AI Workflows

@@ -34,7 +34,7 @@ The MonsterMQ CLI tool (`mmq` in `cli/bin/mmq`) provides native commands to buil
 | :--- | :--- |
 | **List Dashboards** | `mmq hmis` *(or `mmq hmi list`)* |
 | **Create Definition** | `mmq hmi create <name> --title "Title" --path /<name> [--main]` |
-| **Deploy from Folder** | `mmq importHmiZip <folder-path> [name] [--main]` *(auto-zips in memory)* |
+| **Deploy from Folder** | `mmq importHmiZip <folder-path> [name] [--main]` *(or `mmq hmi upload`; auto-zips in memory, `.git` excluded)* |
 | **Deploy from Zip** | `mmq importHmiZip <package.zip> [name] [--main]` |
 | **Export to Folder** | `mmq exportHmiZip <name> <target-dir> --unzip` *(auto-extracts files)* |
 | **Export to Zip** | `mmq exportHmiZip <name> [output.zip]` |

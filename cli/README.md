@@ -524,12 +524,13 @@ Delete and remove one or more deployed HMI dashboards.
 mmq hmi remove <name1> [name2...]
 ```
 
-#### `exportHmiZip` / `hmi export`
+#### `exportHmiZip` / `hmi export` / `hmi download`
 Export deployed HMI package as a binary zip file or extract directly into a target folder using `--unzip`.
 
 ```bash
 mmq exportHmiZip <dashboard-name> [output-file.zip]
 mmq exportHmiZip <dashboard-name> [target-directory] --unzip
+# Aliases: mmq hmi export, mmq hmi download, mmq downloadHmiZip
 ```
 
 *Examples:*
@@ -543,11 +544,12 @@ mmq exportHmiZip FactoryOverview ./src/hmi --unzip
 # ✓ Exported and unzipped HMI dashboard 'FactoryOverview' into './src/hmi/' (45210 bytes archive)
 ```
 
-#### `importHmiZip` / `hmi import`
-Upload and deploy an HMI web dashboard from a binary zip file or local directory (automatically zipped on upload).
+#### `importHmiZip` / `hmi import` / `hmi upload`
+Upload and deploy an HMI web dashboard from a binary zip file or local directory (automatically zipped on upload). When uploading a directory, `.git` directory and metadata are automatically excluded.
 
 ```bash
 mmq importHmiZip <file.zip|directory> [dashboard-name] [--main]
+# Aliases: mmq hmi import, mmq hmi upload, mmq uploadHmiZip
 ```
 
 *Examples:*
@@ -555,8 +557,10 @@ mmq importHmiZip <file.zip|directory> [dashboard-name] [--main]
 # Upload a zip archive:
 mmq importHmiZip ./dist/FactoryOverview.zip
 
-# Upload a directory directly (automatically zipped and deployed):
+# Upload a directory directly (automatically zipped and deployed, .git directory excluded):
 mmq importHmiZip ./src/hmi FactoryOverview --main
+# Or using the upload alias:
+mmq hmi upload ./src/hmi FactoryOverview --main
 ```
 
 ---

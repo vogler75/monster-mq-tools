@@ -144,10 +144,14 @@ func buildCompleter() *readline.PrefixCompleter {
 			readline.PcItem("create"),
 			readline.PcItem("remove"),
 			readline.PcItem("export"),
+			readline.PcItem("download"),
 			readline.PcItem("import"),
+			readline.PcItem("upload"),
 		),
 		readline.PcItem("exportHmiZip"),
+		readline.PcItem("downloadHmiZip"),
 		readline.PcItem("importHmiZip"),
+		readline.PcItem("uploadHmiZip"),
 		readline.PcItem("brokerConfig"),
 		readline.PcItem("features"),
 		readline.PcItem("device",
@@ -285,7 +289,7 @@ Broker & Topic Operations:
   hmi create <name> [options]                 Create a new HMI dashboard definition
   hmi remove <name...>                        Delete and remove one or more HMI dashboards
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
-  importHmiZip <file.zip> [name]              Import & deploy HMI dashboard from a zip
+  importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig (or 'features')                List enabled broker features & capabilities
   device <command>                           Configure devices (device --help)
 
