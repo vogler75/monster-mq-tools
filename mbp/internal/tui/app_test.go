@@ -43,7 +43,7 @@ func TestAppModelPerComponentLogPreservation(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
 
 	// Simulate task for component 0 (main)
-	taskMain := runner.NewTask("main", "build", "build-all", "./build.sh", []string{"--all"}, "/tmp")
+	taskMain := runner.NewTask("main", "build", "build-all", "./build.sh", []string{"--all", "-c"}, "/tmp")
 	taskMain.Status = runner.TaskSuccess
 	for i := 0; i < 50; i++ {
 		taskMain.Lines = append(taskMain.Lines, runner.LogLine{

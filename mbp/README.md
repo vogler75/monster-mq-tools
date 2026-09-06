@@ -9,7 +9,7 @@ It provides both an interactive **Terminal User Interface (TUI)** built with Cha
 ## Features
 
 - **Automated Ecosystem Discovery**: Automatically locates and inspects all MonsterMQ repositories in the parent workspace:
-  - `main` (Main Broker - Java bundle, setup executables, docker)
+  - `main` (Main Broker - Java bundle in container via `-c`, setup executables, docker)
   - `edge` (Edge Broker - Go native binary, multi-arch Debian packages, docker)
   - `dashboard` (Dashboard - Vite bundle, macOS DMG, Windows NSIS setup)
   - `explorer` (Explorer - Electron desktop packages, macOS DMG, Windows setup, docker)
