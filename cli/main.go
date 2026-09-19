@@ -18,9 +18,13 @@ Global Options:
   --url URL           GraphQL endpoint URL (env: MQ_URL / GRAPHQL_URL, default: http://localhost:4000/graphql)
   --host HOST         Broker host or IP address (env: MQ_HOST / GRAPHQL_HOST, default: localhost)
   --port PORT         Broker port number (env: MQ_PORT / GRAPHQL_PORT, default: 4000)
+  --mqtt-host HOST    MQTT broker host or IP (env: MQ_MQTT_HOST / MQTT_HOST, default: derived from GraphQL host)
+  --mqtt-port PORT    MQTT broker port number (env: MQ_MQTT_PORT / MQTT_PORT, default: 1883 or auto-discovered)
   --https             Use HTTPS protocol instead of HTTP (env: MQ_HTTPS / GRAPHQL_HTTPS)
-  --user USERNAME     Username for auth (env: MQ_USER / GRAPHQL_USER)
-  --pass PASSWORD     Password for auth (env: MQ_PASS / GRAPHQL_PASS)
+  --user, -u USER     Username for auth (env: MQ_USER / GRAPHQL_USER)
+  --pass, -p PASS     Password for auth (env: MQ_PASS / GRAPHQL_PASS)
+  --mqtt-user USER    MQTT username (default: CLI auth user)
+  --mqtt-pass PASS    MQTT password (default: CLI auth pass)
   --token TOKEN       JWT Bearer token (env: MQ_TOKEN / GRAPHQL_TOKEN)
   --env FILE          Path to .env file (default: .env)
   --json              Output raw JSON results
@@ -49,6 +53,7 @@ Commands:
   hmis, hmi list                              List deployed HMI web dashboards
   hmi create <name> [options]                 Create a new HMI dashboard definition
   hmi remove <name...>                        Delete and remove one or more HMI dashboards
+  hmi sync <name> [local-dir]                 Sync HMI files live between local dir and broker over MQTT
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
   importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig                                List enabled broker features & capabilities
@@ -68,19 +73,25 @@ Examples:
 `
 
 func main() {
-	var flagURL, flagHost, flagUser, flagPass, flagToken, envFile string
-	var flagPort int
+	var flagURL, flagHost, flagUser, flagPass, flagToken, envFile, flagMqttHost, flagMqttUser, flagMqttPass string
+	var flagPort, flagMqttPort int
 	var flagHTTPS, jsonMode, helpFlag, interactiveFlag bool
 
 	fs := flag.NewFlagSet("mmq", flag.ContinueOnError)
 	fs.StringVar(&flagURL, "url", "", "GraphQL endpoint URL")
 	fs.StringVar(&flagHost, "host", "", "Broker host or IP address")
 	fs.IntVar(&flagPort, "port", 0, "Broker port number")
+	fs.StringVar(&flagMqttHost, "mqtt-host", "", "MQTT broker host or IP address")
+	fs.IntVar(&flagMqttPort, "mqtt-port", 0, "MQTT broker port number")
+	fs.StringVar(&flagMqttUser, "mqtt-user", "", "MQTT username")
+	fs.StringVar(&flagMqttPass, "mqtt-pass", "", "MQTT password")
 	fs.BoolVar(&flagHTTPS, "https", false, "Use HTTPS protocol")
 	fs.StringVar(&flagUser, "user", "", "Username for authentication")
 	fs.StringVar(&flagUser, "username", "", "Username for authentication")
+	fs.StringVar(&flagUser, "u", "", "Username for authentication")
 	fs.StringVar(&flagPass, "pass", "", "Password for authentication")
 	fs.StringVar(&flagPass, "password", "", "Password for authentication")
+	fs.StringVar(&flagPass, "p", "", "Password for authentication")
 	fs.StringVar(&flagToken, "token", "", "JWT Bearer token")
 	fs.StringVar(&envFile, "env", ".env", "Path to .env file")
 	fs.StringVar(&envFile, "env-file", ".env", "Path to .env file")
@@ -98,7 +109,7 @@ func main() {
 		arg := os.Args[i]
 		if strings.HasPrefix(arg, "-") && len(commandArgs) == 0 {
 			globalArgs = append(globalArgs, arg)
-			if (arg == "--url" || arg == "--host" || arg == "--port" || arg == "--user" || arg == "--username" || arg == "--pass" || arg == "--password" || arg == "--token" || arg == "--env" || arg == "--env-file") && i+1 < len(os.Args) {
+			if (arg == "--url" || arg == "--host" || arg == "--port" || arg == "--mqtt-host" || arg == "--mqtt-port" || arg == "--mqtt-user" || arg == "--mqtt-pass" || arg == "--user" || arg == "--username" || arg == "-u" || arg == "--pass" || arg == "--password" || arg == "-p" || arg == "--token" || arg == "--env" || arg == "--env-file") && i+1 < len(os.Args) {
 				i++
 				globalArgs = append(globalArgs, os.Args[i])
 			}
@@ -116,7 +127,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	cfg := ResolveClientConfig(flagURL, flagHost, flagPort, flagHTTPS, flagUser, flagPass, flagToken, envFile, jsonMode)
+	cfg := ResolveClientConfig(flagURL, flagHost, flagPort, flagHTTPS, flagUser, flagPass, flagToken, envFile, jsonMode, flagMqttHost, flagMqttPort, flagMqttUser, flagMqttPass)
 	client := NewClient(cfg)
 	ctx := context.Background()
 
@@ -192,6 +203,7 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			fmt.Println("       mmq hmi list")
 			fmt.Println("       mmq hmi create <name> [options]")
 			fmt.Println("       mmq hmi remove <name1> [name2...]")
+			fmt.Println("       mmq hmi sync <name> [local-dir] [options]")
 			fmt.Println("       mmq exportHmiZip <name> [output.zip]")
 			fmt.Println("       mmq importHmiZip <file.zip|dir> [name] [--main]")
 			fmt.Println("       mmq hmi import <file.zip|dir> [name] [--main]")
@@ -203,6 +215,7 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			fmt.Println("  hmi list                     List all deployed HMI dashboards (alias: hmis)")
 			fmt.Println("  hmi create <name> [options]  Create a new HMI dashboard definition")
 			fmt.Println("  hmi remove <name...>         Delete and remove one or more HMI dashboards")
+			fmt.Println("  hmi sync <name> [local-dir]  Sync HMI files live between local dir and broker over MQTT (alias: hmi watch)")
 			fmt.Println("  exportHmiZip <name>          Export HMI dashboard to a binary zip file (alias: hmi export, hmi download)")
 			fmt.Println("  importHmiZip <file.zip|dir>  Import & deploy HMI dashboard from a zip package or directory (alias: hmi import, hmi upload)")
 			fmt.Println()
@@ -219,6 +232,8 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 			return runExportHmiZip(ctx, client, actionArgs)
 		case "import", "upload":
 			return runImportHmiZip(ctx, client, actionArgs)
+		case "sync", "watch":
+			return runHmiSync(ctx, client, actionArgs)
 		default:
 			return runHmiList(ctx, client, subargs)
 		}
@@ -274,6 +289,8 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 		return runExportHmiZip(ctx, client, subargs)
 	case "importHmiZip", "uploadHmiZip":
 		return runImportHmiZip(ctx, client, subargs)
+	case "hmiSync", "sync":
+		return runHmiSync(ctx, client, subargs)
 	case "device":
 		return runDevice(ctx, client, subargs)
 	default:

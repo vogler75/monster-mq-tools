@@ -46,7 +46,7 @@ CLEAN=false
 if [ $# -gt 0 ]; then
     case "$1" in
         --all)
-            BUILD_NATIVE=false
+            BUILD_NATIVE=true
             BUILD_ALL=true
             ;;
         --native)

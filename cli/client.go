@@ -24,6 +24,10 @@ type ClientConfig struct {
 	Token    string
 	Timeout  time.Duration
 	JSONMode bool
+	MqttHost string
+	MqttPort int
+	MqttUser string
+	MqttPass string
 }
 
 // LoadDotEnv loads key=value pairs from a .env file into os.Environ if not already set.
@@ -149,7 +153,7 @@ func BuildEndpointURL(flagURL, flagHost string, flagPort int, flagHTTPS bool) st
 }
 
 // ResolveClientConfig merges CLI flags, environment variables, and defaults.
-func ResolveClientConfig(flagURL, flagHost string, flagPort int, flagHTTPS bool, flagUser, flagPass, flagToken, envFile string, jsonMode bool) *ClientConfig {
+func ResolveClientConfig(flagURL, flagHost string, flagPort int, flagHTTPS bool, flagUser, flagPass, flagToken, envFile string, jsonMode bool, extra ...any) *ClientConfig {
 	LoadDotEnv(envFile)
 
 	url := BuildEndpointURL(flagURL, flagHost, flagPort, flagHTTPS)
@@ -178,6 +182,71 @@ func ResolveClientConfig(flagURL, flagHost string, flagPort int, flagHTTPS bool,
 		token = os.Getenv("GRAPHQL_TOKEN")
 	}
 
+	var mqttHost string
+	var mqttPort int
+	if len(extra) > 0 {
+		if h, ok := extra[0].(string); ok {
+			mqttHost = h
+		}
+	}
+	if len(extra) > 1 {
+		if p, ok := extra[1].(int); ok {
+			mqttPort = p
+		}
+	}
+
+	if mqttHost == "" {
+		mqttHost = os.Getenv("MQ_MQTT_HOST")
+		if mqttHost == "" {
+			mqttHost = os.Getenv("MQTT_HOST")
+		}
+	}
+
+	if mqttPort == 0 {
+		if envP := os.Getenv("MQ_MQTT_PORT"); envP != "" {
+			if p, err := strconv.Atoi(envP); err == nil {
+				mqttPort = p
+			}
+		} else if envP := os.Getenv("MQTT_PORT"); envP != "" {
+			if p, err := strconv.Atoi(envP); err == nil {
+				mqttPort = p
+			}
+		}
+	}
+
+	var mqttUser string
+	var mqttPass string
+	if len(extra) > 2 {
+		if u, ok := extra[2].(string); ok {
+			mqttUser = u
+		}
+	}
+	if len(extra) > 3 {
+		if p, ok := extra[3].(string); ok {
+			mqttPass = p
+		}
+	}
+
+	if mqttUser == "" {
+		mqttUser = os.Getenv("MQ_MQTT_USER")
+		if mqttUser == "" {
+			mqttUser = os.Getenv("MQTT_USER")
+		}
+		if mqttUser == "" {
+			mqttUser = user
+		}
+	}
+
+	if mqttPass == "" {
+		mqttPass = os.Getenv("MQ_MQTT_PASS")
+		if mqttPass == "" {
+			mqttPass = os.Getenv("MQTT_PASS")
+		}
+		if mqttPass == "" {
+			mqttPass = pass
+		}
+	}
+
 	return &ClientConfig{
 		URL:      url,
 		Username: user,
@@ -185,6 +254,10 @@ func ResolveClientConfig(flagURL, flagHost string, flagPort int, flagHTTPS bool,
 		Token:    token,
 		Timeout:  15 * time.Second,
 		JSONMode: jsonMode,
+		MqttHost: mqttHost,
+		MqttPort: mqttPort,
+		MqttUser: mqttUser,
+		MqttPass: mqttPass,
 	}
 }
 

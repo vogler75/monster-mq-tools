@@ -14,8 +14,8 @@ This skill provides operational instructions and command references for using `m
 - **Binary Location**: `cli/bin/mmq` (built via `cd cli && ./build.sh` or `cd cli && go build -o bin/mmq .`)
 - **Default Endpoint**: `http://localhost:4000/graphql`
 - **Configuration Sources**:
-  - CLI flags: `--url`, `--host`, `--port`, `--https`, `--user`, `--pass`, `--token`, `-i`
-  - Environment variables: `MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN` (or `GRAPHQL_*` equivalents)
+  - CLI flags: `--url`, `--host`, `--port`, `--mqtt-host`, `--mqtt-port`, `--https`, `--user`, `--pass`, `--token`, `-i`
+  - Environment variables: `MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_MQTT_PORT`, `MQTT_PORT`, `MQ_MQTT_HOST`, `MQTT_HOST`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN` (or `GRAPHQL_*` equivalents)
   - `.env` files
 
 ---
@@ -91,6 +91,7 @@ mmq --port 4001 features
 - **`hmi remove <name...>`**: Delete and remove one or more deployed HMI dashboards
 - **`exportHmiZip <name> [out] [--unzip]`** (or `hmi export`, `hmi download`, `downloadHmiZip`): Export deployed HMI package to binary zip file or extract to folder
 - **`importHmiZip <file.zip|dir> [name] [--main]`** (or `hmi import`, `hmi upload`, `uploadHmiZip`): Upload & deploy HMI dashboard from a zip package or local directory (`.git` directory and metadata are automatically excluded when uploading folders)
+- **`hmi sync <name> [localDir]`** (or `sync <name>`): Live bidirectional file synchronization between local directory and broker's HMI storage over MQTT. Supports `--pull` (clone remote files before watching), `--pull-only` (single-shot download), `--push-only` (single-shot upload), `--debounce <ms>`, `--ignore <patterns>`, and cross-platform recursive watching on Windows, macOS, and Linux.
 - **`brokerConfig`**: List enabled broker features & capabilities
 
 ### Device Configuration for AI Workflows

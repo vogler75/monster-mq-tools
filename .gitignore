@@ -39,3 +39,4 @@ Thumbs.db
 # Environment and local configs
 .env
 .env.local
+/test/

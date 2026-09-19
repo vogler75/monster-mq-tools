@@ -147,11 +147,14 @@ func buildCompleter() *readline.PrefixCompleter {
 			readline.PcItem("download"),
 			readline.PcItem("import"),
 			readline.PcItem("upload"),
+			readline.PcItem("sync"),
+			readline.PcItem("watch"),
 		),
 		readline.PcItem("exportHmiZip"),
 		readline.PcItem("downloadHmiZip"),
 		readline.PcItem("importHmiZip"),
 		readline.PcItem("uploadHmiZip"),
+		readline.PcItem("sync"),
 		readline.PcItem("brokerConfig"),
 		readline.PcItem("features"),
 		readline.PcItem("device",
@@ -288,6 +291,7 @@ Broker & Topic Operations:
   hmis, hmi list                              List deployed HMI web dashboards
   hmi create <name> [options]                 Create a new HMI dashboard definition
   hmi remove <name...>                        Delete and remove one or more HMI dashboards
+  hmi sync <name> [local-dir]                 Sync HMI files live between local dir and broker over MQTT
   exportHmiZip <name> [file.zip]              Export HMI dashboard to a binary zip
   importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig (or 'features')                List enabled broker features & capabilities

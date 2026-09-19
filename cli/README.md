@@ -100,7 +100,9 @@ go build -o bin/mmq .
 | :--- | :--- | :--- | :--- | :--- |
 | `--url` | - | `MQ_URL`, `GRAPHQL_URL` | `http://localhost:4000/graphql` | GraphQL endpoint URL |
 | `--host` | - | `MQ_HOST`, `GRAPHQL_HOST` | `localhost` | Broker host / IP address |
-| `--port` | - | `MQ_PORT`, `GRAPHQL_PORT` | `4000` | Broker port number |
+| `--port` | - | `MQ_PORT`, `GRAPHQL_PORT` | `4000` | Broker port number (GraphQL/HTTP) |
+| `--mqtt-host` | - | `MQ_MQTT_HOST`, `MQTT_HOST` | (derived from `--host`) | MQTT broker host / IP address |
+| `--mqtt-port` | - | `MQ_MQTT_PORT`, `MQTT_PORT` | `1883` (or auto-discovered) | MQTT broker port number |
 | `--https` | - | `MQ_HTTPS`, `GRAPHQL_HTTPS` | `false` | Use HTTPS protocol instead of HTTP |
 | `--user` | `--username` | `MQ_USER`, `GRAPHQL_USER` | - | Username for authentication |
 | `--pass` | `--password` | `MQ_PASS`, `GRAPHQL_PASS` | - | Password for authentication |
@@ -561,6 +563,35 @@ mmq importHmiZip ./dist/FactoryOverview.zip
 mmq importHmiZip ./src/hmi FactoryOverview --main
 # Or using the upload alias:
 mmq hmi upload ./src/hmi FactoryOverview --main
+```
+
+#### `hmi sync` / `sync`
+Live bidirectional file synchronization between local workstation and remote broker via MQTT. Uses recursive file watching (`fsnotify`) to detect local edits and push changes in milliseconds over MQTT to the broker's HMI storage directory. Supported across Windows, macOS, and Linux.
+
+```bash
+mmq hmi sync <dashboard-name> [local-dir] [options]
+# Alias: mmq sync <dashboard-name> [local-dir]
+```
+
+*Options:*
+- `--pull`: Pull remote dashboard files to local directory before starting file watcher
+- `--pull-only`: Download all remote files to local directory once and exit
+- `--push-only`: Upload all local files from local directory to remote broker once and exit
+- `--mqtt-host <host>`: MQTT broker host (defaults to host from GraphQL endpoint)
+- `--mqtt-port <port>`: MQTT broker port (default: 1883 or 8883 for TLS)
+- `--debounce <ms>`: Debounce delay in ms for file write events (default: `100`)
+- `--ignore <patterns>`: Comma-separated ignore patterns (default: `.git,node_modules,*.tmp`)
+
+*Examples:*
+```bash
+# Watch mode with initial pull:
+mmq --host 192.168.1.50 hmi sync main ./my-hmi --pull
+
+# One-shot pull:
+mmq --host 192.168.1.50 hmi sync main ./my-hmi --pull-only
+
+# One-shot push:
+mmq --host 192.168.1.50 hmi sync main ./my-hmi --push-only
 ```
 
 ---
