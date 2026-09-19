@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Camera Viewer</title>
+    <script>
+        // Ensure trailing slash for directory routes so relative assets resolve properly
+        if (!location.pathname.endsWith('/') && !location.pathname.endsWith('.html')) {
+            location.replace(location.pathname + '/' + location.search + location.hash);
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #000000;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #camera-image {
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            display: none;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        /* Overlay for initial loading, topic configuration, and error states */
+        #status-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #090d16;
+            z-index: 100;
+            padding: 24px;
+            text-align: center;
+            transition: opacity 0.3s ease;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid rgba(255, 255, 255, 0.15);
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #f1f5f9;
+        }
+
+        .status-desc {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            max-width: 500px;
+            line-height: 1.5;
+            word-break: break-all;
+        }
+
+        .topic-badge {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 6px 14px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            color: #38bdf8;
+        }
+
+        /* Input form shown if no topic argument provided */
+        #topic-form {
+            display: none;
+            margin-top: 24px;
+            width: 100%;
+            max-width: 440px;
+            background: #1e293b;
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            text-align: left;
+        }
+
+        #topic-form label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+
+        #topic-form input {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-family: inherit;
+            margin-bottom: 16px;
+            outline: none;
+        }
+
+        #topic-form input:focus {
+            border-color: #38bdf8;
+        }
+
+        #topic-form button {
+            width: 100%;
+            padding: 11px;
+            border-radius: 6px;
+            border: none;
+            background: #0284c7;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #topic-form button:hover {
+            background: #0369a1;
+        }
+
+        /* Floating unobtrusive reconnect pill in top right corner */
+        #reconnect-pill {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #fca5a5;
+            z-index: 50;
+            user-select: none;
+            pointer-events: none;
+            animation: pulse 2s infinite;
+        }
+
+        .reconnect-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Full-sized Camera JPEG -->
+    <img id="camera-image" alt="Camera Stream" title="Double click to toggle fit / Contain">
+
+    <!-- Reconnection indicator (only shown if connection drops after image was already loaded) -->
+    <div id="reconnect-pill">
+        <span class="reconnect-dot"></span>
+        <span>Reconnecting to broker...</span>
+    </div>
+
+    <!-- Status overlay for initial connection / waiting for first frame -->
+    <div id="status-overlay">
+        <div class="spinner" id="spinner"></div>
+        <div class="status-title" id="status-title">Loading MQTT Client...</div>
+        <div class="status-desc" id="status-desc">Initializing viewer...</div>
+        <div class="topic-badge" id="status-topic" style="display: none;"></div>
+
+        <!-- Topic input form if no topic URL argument provided -->
+        <form id="topic-form">
+            <label for="input-topic">MQTT Topic Name</label>
+            <input type="text" id="input-topic" placeholder="e.g. cameras/sick264/capture/latest/pic" required autofocus>
+            <label for="input-broker">WebSocket Broker URL</label>
+            <input type="text" id="input-broker" value="" required>
+            <button type="submit">View Stream</button>
+        </form>
+    </div>
+
+    <script>
+        (function() {
+            const img = document.getElementById('camera-image');
+            const overlay = document.getElementById('status-overlay');
+            const spinner = document.getElementById('spinner');
+            const statusTitle = document.getElementById('status-title');
+            const statusDesc = document.getElementById('status-desc');
+            const statusTopic = document.getElementById('status-topic');
+            const reconnectPill = document.getElementById('reconnect-pill');
+            const topicForm = document.getElementById('topic-form');
+            const inputTopic = document.getElementById('input-topic');
+            const inputBroker = document.getElementById('input-broker');
+
+            // Dynamic default broker URL based on current host
+            const defaultBrokerHost = window.location.hostname || 'localhost';
+            const defaultBrokerProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const defaultBroker = `${defaultBrokerProto}//${defaultBrokerHost}:1884/mqtt`;
+
+            // Parse URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const topicParam = urlParams.get('topic') || urlParams.get('t') || window.location.hash.replace(/^#/, '');
+            const brokerParam = urlParams.get('broker') || urlParams.get('ws') || defaultBroker;
+            const fitParam = urlParams.get('fit') || 'contain'; // 'contain' or 'cover'
+
+            img.style.objectFit = fitParam;
+
+            // Double-click toggles between contain and cover
+            img.addEventListener('dblclick', () => {
+                img.style.objectFit = (img.style.objectFit === 'cover') ? 'contain' : 'cover';
+            });
+
+            // Robust dynamic script loader that handles missing trailing slashes and relative paths
+            function loadMqttLibrary() {
+                if (typeof mqtt !== 'undefined') {
+                    return Promise.resolve();
+                }
+
+                // Determine directory path of the current page
+                let dirPath = location.pathname;
+                if (dirPath.endsWith('.html')) {
+                    dirPath = dirPath.substring(0, dirPath.lastIndexOf('/') + 1);
+                } else if (!dirPath.endsWith('/')) {
+                    dirPath = dirPath + '/';
+                }
+
+                const sources = [
+                    // 1. Exact path with directory prefix (e.g. /hmi/cameras/mqtt.min.js)
+                    (location.origin && location.origin !== 'null' ? location.origin : '') + dirPath + 'mqtt.min.js',
+                    // 2. Relative from current directory
+                    './mqtt.min.js',
+                    'mqtt.min.js',
+                    // 3. CDN fallback in case the local file was omitted or failed
+                    'https://unpkg.com/mqtt/dist/mqtt.min.js'
+                ];
+
+                return new Promise((resolve, reject) => {
+                    let index = 0;
+                    function tryNext() {
+                        if (index >= sources.length) {
+                            reject(new Error('Could not load mqtt.min.js locally or from CDN'));
+                            return;
+                        }
+                        const src = sources[index++];
+                        const script = document.createElement('script');
+                        script.src = src;
+                        script.onload = () => {
+                            if (typeof mqtt !== 'undefined') {
+                                resolve();
+                            } else {
+                                tryNext();
+                            }
+                        };
+                        script.onerror = () => {
+                            script.remove();
+                            tryNext();
+                        };
+                        document.head.appendChild(script);
+                    }
+                    tryNext();
+                });
+            }
+
+            // If no topic parameter is supplied in the URL, show the configuration form
+            if (!topicParam) {
+                spinner.style.display = 'none';
+                statusTitle.textContent = 'MQTT Camera Stream';
+                statusDesc.textContent = 'Provide the MQTT topic name as a URL argument (e.g. ?topic=your/topic) or enter it below:';
+                inputBroker.value = brokerParam;
+                topicForm.style.display = 'block';
+
+                topicForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const enteredTopic = inputTopic.value.trim();
+                    const enteredBroker = inputBroker.value.trim();
+                    if (!enteredTopic) return;
+
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('topic', enteredTopic);
+                    if (enteredBroker !== defaultBroker) {
+                        newUrl.searchParams.set('broker', enteredBroker);
+                    }
+                    window.location.href = newUrl.toString();
+                });
+                return;
+            }
+
+            const currentTopic = topicParam.trim();
+            statusTopic.textContent = currentTopic;
+            statusTopic.style.display = 'inline-block';
+            statusTitle.textContent = 'Connecting to MQTT Broker';
+            statusDesc.textContent = `Connecting to ${brokerParam}...`;
+
+            let client = null;
+            let currentBlobUrl = null;
+            let hasReceivedFrame = false;
+
+            // Function to render the incoming JPEG payload
+            function displayImage(payload) {
+                if (!payload || payload.length === 0) return;
+
+                // Check for raw binary JPEG (magic bytes 0xFF, 0xD8, 0xFF) or PNG
+                const isJpeg = payload.length > 3 && payload[0] === 0xFF && payload[1] === 0xD8 && payload[2] === 0xFF;
+                const isPng = payload.length > 4 && payload[0] === 0x89 && payload[1] === 0x50 && payload[2] === 0x4E && payload[3] === 0x47;
+
+                if (isJpeg || isPng) {
+                    const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+                    const blob = new Blob([payload], { type: mimeType });
+                    const newUrl = URL.createObjectURL(blob);
+                    renderUrl(newUrl, true);
+                    return;
+                }
+
+                // Check for text-encoded payload (data URI, base64 string, or JSON wrapper)
+                try {
+                    const text = new TextDecoder('utf-8').decode(payload).trim();
+                    if (text.startsWith('data:image/')) {
+                        renderUrl(text, false);
+                        return;
+                    }
+                    if (text.startsWith('{')) {
+                        const parsed = JSON.parse(text);
+                        const raw = parsed.image || parsed.data || parsed.jpg || parsed.frame || parsed.payload || parsed.base64;
+                        if (raw) {
+                            renderUrl(raw.startsWith('data:image/') ? raw : ('data:image/jpeg;base64,' + raw), false);
+                            return;
+                        }
+                    }
+                    if (/^[A-Za-z0-9+/=]+$/.test(text) && text.length > 100) {
+                        renderUrl('data:image/jpeg;base64,' + text, false);
+                        return;
+                    }
+                } catch (e) {
+                    // Fallback to binary blob
+                }
+
+                const blob = new Blob([payload], { type: 'image/jpeg' });
+                const newUrl = URL.createObjectURL(blob);
+                renderUrl(newUrl, true);
+            }
+
+            function renderUrl(url, isBlob) {
+                img.src = url;
+                img.onload = () => {
+                    if (isBlob) {
+                        if (currentBlobUrl) {
+                            URL.revokeObjectURL(currentBlobUrl);
+                        }
+                        currentBlobUrl = url;
+                    }
+
+                    if (!hasReceivedFrame) {
+                        hasReceivedFrame = true;
+                        // Hide overlay completely - site now only shows the full-sized image
+                        overlay.style.display = 'none';
+                        img.style.display = 'block';
+                    }
+                    reconnectPill.style.display = 'none';
+                };
+                img.onerror = () => {
+                    if (isBlob) URL.revokeObjectURL(url);
+                };
+            }
+
+            function startMqtt() {
+                loadMqttLibrary().then(() => {
+                    statusTitle.textContent = 'Connecting to Broker';
+                    statusDesc.textContent = `Connecting to ${brokerParam}...`;
+
+                    const clientId = 'web_cam_' + Math.random().toString(16).substring(2, 10);
+
+                    client = mqtt.connect(brokerParam, {
+                        clientId: clientId,
+                        clean: true,
+                        reconnectPeriod: 2000,   // Automatically retry connection every 2 seconds
+                        connectTimeout: 5000,    // Connection timeout in ms
+                        keepalive: 30
+                    });
+
+                    client.on('connect', () => {
+                        reconnectPill.style.display = 'none';
+                        if (!hasReceivedFrame) {
+                            statusTitle.textContent = 'Subscribed to Topic';
+                            statusDesc.textContent = 'Waiting for image frame on topic:';
+                        }
+                        client.subscribe(currentTopic, { qos: 0 }, (err) => {
+                            if (err) {
+                                console.error('Subscription error:', err);
+                                if (!hasReceivedFrame) {
+                                    statusTitle.textContent = 'Subscription Failed';
+                                    statusDesc.textContent = err.message || err;
+                                }
+                            }
+                        });
+                    });
+
+                    client.on('message', (topic, message) => {
+                        if (topic === currentTopic) {
+                            displayImage(message);
+                        }
+                    });
+
+                    client.on('reconnect', () => {
+                        if (hasReceivedFrame) {
+                            reconnectPill.style.display = 'flex';
+                        } else {
+                            statusTitle.textContent = 'Reconnecting...';
+                            statusDesc.textContent = `Reconnecting to ${brokerParam}...`;
+                        }
+                    });
+
+                    client.on('close', () => {
+                        if (hasReceivedFrame) {
+                            reconnectPill.style.display = 'flex';
+                        }
+                    });
+
+                    client.on('offline', () => {
+                        if (hasReceivedFrame) {
+                            reconnectPill.style.display = 'flex';
+                        }
+                    });
+
+                    client.on('error', (err) => {
+                        console.error('MQTT error:', err);
+                        if (!hasReceivedFrame) {
+                            statusTitle.textContent = 'Connection Error';
+                            statusDesc.textContent = `Failed to connect to ${brokerParam}. Retrying automatically...`;
+                        } else {
+                            reconnectPill.style.display = 'flex';
+                        }
+                    });
+                }).catch((err) => {
+                    spinner.style.display = 'none';
+                    statusTitle.textContent = 'Failed to Load MQTT Client';
+                    statusDesc.textContent = err.message || 'Could not load mqtt.min.js';
+                });
+            }
+
+            startMqtt();
+        })();
+    </script>
+</body>
+</html>
