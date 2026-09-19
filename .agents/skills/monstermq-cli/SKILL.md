@@ -92,6 +92,17 @@ mmq --port 4001 features
 - **`exportHmiZip <name> [out] [--unzip]`** (or `hmi export`, `hmi download`, `downloadHmiZip`): Export deployed HMI package to binary zip file or extract to folder
 - **`importHmiZip <file.zip|dir> [name] [--main]`** (or `hmi import`, `hmi upload`, `uploadHmiZip`): Upload & deploy HMI dashboard from a zip package or local directory (`.git` directory and metadata are automatically excluded when uploading folders)
 - **`hmi sync <name> [localDir]`** (or `sync <name>`): Live bidirectional file synchronization between local directory and broker's HMI storage over MQTT. Supports `--pull` (clone remote files before watching), `--pull-only` (single-shot download), `--push-only` (single-shot upload), `--debounce <ms>`, `--ignore <patterns>`, and cross-platform recursive watching on Windows, macOS, and Linux.
+- **`scripts` / `script list [filter]`**: List all configured broker scripts with execution metrics, triggers, and state
+- **`script get <name>`**: Inspect full script configuration, bindings, source code, and circular execution logs
+- **`script create <name> [options]`**: Create and deploy a new script (`--lang`, `--trigger`, `--topic`, `--interval`, `--code`, `--file`, etc.)
+- **`script update <name> [options]`**: Update existing script code, trigger parameters, or options
+- **`script delete <name...>`**: Delete one or more scripts from the broker
+- **`script toggle <name> <on|off>`** (or `start`, `stop`, `enable`, `disable`): Toggle script execution state
+- **`script test <name|--code <code>> [options]`**: Dry-run execute script in a sandbox with mock `--topic`, `--payload`, and `--args`
+- **`script logs <name>`**: Inspect recent circular execution log entries and errors
+- **`script docs [language]`**: Fetch authoritative Markdown API reference directly from the connected broker
+- **`script skill [language] [--output file] [--install]`**: Retrieve ready-to-use AI Skill specification or install it directly into `~/.gemini/antigravity/skills/`
+- **`script languages`**: Discover supported scripting languages on the connected broker (Starlark on Edge; Python 3 & JavaScript on Main)
 - **`brokerConfig`**: List enabled broker features & capabilities
 
 ### Device Configuration for AI Workflows
@@ -144,6 +155,97 @@ mmq --json device address add opcua-example cli/examples/devices/opcua-address.j
 ```
 
 See `cli/README.md` for the complete reference and configuration semantics.
+
+### Broker Script Management & AI Skills
+
+`mmq script` provides complete lifecycle management for standalone broker scripts (Starlark on Edge Broker; Python 3 & JavaScript on Main Broker), dry-run testing in an interactive sandbox, execution log inspection, and dynamic AI Skill export.
+
+#### 1. Discovery & Inspection
+```bash
+# List all configured scripts on the connected broker (or mmq scripts)
+mmq script list
+mmq script list "temp"
+
+# Inspect detailed script configuration, trigger parameters, code, and recent execution logs
+mmq script get TemperatureMonitor
+
+# List supported languages on the target broker
+mmq script languages
+```
+
+#### 2. Authoring, Deploying & Modifying
+Scripts can be deployed directly from an inline code string or from a local source file:
+```bash
+# Deploy a new script from inline code
+mmq script create HighTempAlert \
+  --lang starlark \
+  --trigger TOPIC \
+  --topic "sensors/+/temperature" \
+  --desc "Publishes alerts when temperature exceeds threshold" \
+  --code '
+if msg != None and type(msg["payload"]) == "dict":
+    temp = msg["payload"].get("temp", 0)
+    if temp > 75.0:
+        mqtt.publish("alarms/temp", json.encode({"alarm": True, "temp": temp}), qos=1)
+        log.warn("High temp: " + str(temp))
+'
+
+# Deploy a script from a local file with a periodic timer trigger
+mmq script create ChillerWatchdog \
+  --lang starlark \
+  --trigger TIMER \
+  --interval 5000 \
+  --file ./chiller.star
+
+# Update existing script code or configuration
+mmq script update HighTempAlert --file ./updated.star
+
+# Toggle script execution state
+mmq script toggle HighTempAlert on
+mmq script toggle HighTempAlert off
+# or using aliases: mmq script start <name>, mmq script stop <name>
+
+# Delete scripts
+mmq script delete HighTempAlert ChillerWatchdog
+```
+
+#### 3. Dry-Run Sandbox Testing
+Test scripts with mock MQTT topic, payload, and argument inputs in an isolated sandbox without side effects:
+```bash
+# Test an existing configured script
+mmq script test HighTempAlert --topic "sensors/room1/temperature" --payload '{"temp": 82.5}'
+
+# Test inline code directly without saving or modifying broker configuration
+mmq script test --lang starlark --topic "sensors/temp" --payload '{"temp": 90}' --code '
+if msg != None:
+    mqtt.publish("alerts/overheat", "ALARM", qos=1)
+    log.warn("Overheat!")
+'
+```
+
+#### 4. Execution Logs
+Inspect circular execution log buffers for any script:
+```bash
+mmq script logs HighTempAlert
+```
+
+#### 5. Fetching Broker Documentation & AI Skills
+Both Edge and Main brokers authoritatively deliver documentation and AI skills for their supported runtimes via GraphQL:
+```bash
+# View Markdown API documentation for the broker's scripting runtime
+mmq script docs
+mmq script docs starlark
+
+# Print ready-to-use AI Skill (SKILL.md) for coding assistants
+mmq script skill
+mmq script skill python
+
+# Save the AI Skill to a local file
+mmq script skill -o ./SKILL.md
+
+# Install directly to local AI Agent skills directory (~/.gemini/antigravity/skills/monstermq-scripts/SKILL.md)
+mmq script skill --install
+```
 
 ### JSON Output & Automation
 For automated processing or shell pipelines, put `--json` before the command:

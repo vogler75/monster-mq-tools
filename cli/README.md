@@ -644,6 +644,87 @@ mmq aggregatedMessages "factory/floor1/temp" --interval ONE_HOUR --functions AVG
 
 ---
 
+## Broker Script Management & AI Skills
+
+`mmq script` provides complete lifecycle management for standalone broker scripts (Starlark on Edge, Python & JavaScript on Main), dry-run testing in an interactive sandbox, execution log inspection, and AI Skill export.
+
+### 1. Discover & Inspect
+```bash
+# List all configured scripts
+mmq script list
+
+# Get script details, configuration, code, and recent execution logs
+mmq script get TemperatureMonitor
+```
+
+### 2. Create & Update
+```bash
+# Deploy a new script from inline code
+mmq script create TemperatureMonitor \
+  --lang starlark \
+  --trigger TOPIC \
+  --topic "sensors/+/temperature" \
+  --desc "Monitors temperatures and alerts on threshold" \
+  --code '
+if msg != None and type(msg["payload"]) == "dict":
+    temp = msg["payload"].get("temp", 0)
+    if temp > 75.0:
+        mqtt.publish("alarms/temp", json.encode({"alarm": True, "temp": temp}), qos=1)
+        log.warn("High temp: " + str(temp))
+'
+
+# Create script from a local file
+mmq script create ChillerController --lang starlark --trigger TIMER --interval 5000 --file ./chiller.star
+
+# Update existing script
+mmq script update TemperatureMonitor --file ./updated.star
+
+# Enable / Disable
+mmq script toggle TemperatureMonitor on
+mmq script toggle TemperatureMonitor off
+
+# Delete script
+mmq script delete TemperatureMonitor
+```
+
+### 3. Dry-Run Sandbox Testing
+Test scripts with mock MQTT topic, payload, and argument inputs without side effects:
+```bash
+# Test an existing script
+mmq script test TemperatureMonitor --topic "sensors/room1/temperature" --payload '{"temp": 82.5}'
+
+# Test inline code without saving
+mmq script test --lang starlark --topic "sensors/temp" --payload '{"temp": 90}' --code '
+if msg != None:
+    mqtt.publish("alerts/overheat", "ALARM", qos=1)
+    log.warn("Overheat!")
+'
+```
+
+### 4. Inspect Execution Logs
+```bash
+mmq script logs TemperatureMonitor
+```
+
+### 5. Fetch Documentation & Export AI Skills
+Retrieve live API reference and ready-to-use AI skills directly from the connected broker:
+```bash
+# Print Markdown documentation for the broker's scripting languages
+mmq script docs
+mmq script docs starlark
+
+# Print AI Skill instructions for coding assistants (Antigravity, Claude, ChatGPT)
+mmq script skill
+
+# Export AI Skill directly to a file
+mmq script skill -o ./SKILL.md
+
+# Install directly to Antigravity skills directory (~/.gemini/antigravity/skills/monstermq-scripts/SKILL.md)
+mmq script skill --install
+```
+
+---
+
 ## License
 
 MonsterMQ CLI is licensed under the terms included in the [LICENSE](file:///Users/vogler/Workspace/monster/cli/LICENSE) file.

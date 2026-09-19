@@ -180,6 +180,22 @@ func buildCompleter() *readline.PrefixCompleter {
 			readline.PcItem("enable"),
 			readline.PcItem("disable"),
 		),
+		readline.PcItem("scripts"),
+		readline.PcItem("script",
+			readline.PcItem("list"),
+			readline.PcItem("get"),
+			readline.PcItem("create"),
+			readline.PcItem("update"),
+			readline.PcItem("delete"),
+			readline.PcItem("toggle"),
+			readline.PcItem("start"),
+			readline.PcItem("stop"),
+			readline.PcItem("test"),
+			readline.PcItem("logs"),
+			readline.PcItem("docs"),
+			readline.PcItem("skill"),
+			readline.PcItem("languages"),
+		),
 		readline.PcItem("connect"),
 		readline.PcItem("auth"),
 		readline.PcItem("login"),
@@ -296,6 +312,7 @@ Broker & Topic Operations:
   importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig (or 'features')                List enabled broker features & capabilities
   device <command>                           Configure devices (device --help)
+  scripts, script <command>                  Manage broker scripts, dry-run test, and AI skills (script --help)
 
 Interactive Shell Commands:
   connect <url|host:port|port>                Switch / reconnect to a broker endpoint

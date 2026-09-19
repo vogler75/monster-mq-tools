@@ -70,6 +70,12 @@ mmq [localhost:4000]> exit
 
 # Manage and list configured devices/subsystems
 ./bin/mmq device list
+
+# Manage broker scripts, dry-run test sandbox, and fetch AI skills
+./bin/mmq script list
+./bin/mmq script test MyScript --topic "sensors/temp" --payload '{"temp": 85}'
+./bin/mmq script docs
+./bin/mmq script skill --install
 ```
 
 For full CLI documentation, global flags, environment configuration, and detailed command syntax, see [`cli/README.md`](cli/README.md).

@@ -58,6 +58,7 @@ Commands:
   importHmiZip <file.zip|dir> [name]          Import & deploy HMI dashboard from a zip or directory
   brokerConfig                                List enabled broker features & capabilities
   device <command>                           Configure devices (device --help)
+  scripts, script <command>                  Manage broker scripts, dry-run test, and AI skills (script --help)
 
 Examples:
   mmq                                                       # Start interactive CLI session on localhost:4000
@@ -293,6 +294,8 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 		return runHmiSync(ctx, client, subargs)
 	case "device":
 		return runDevice(ctx, client, subargs)
+	case "script", "scripts":
+		return runScriptCommand(ctx, client, subargs)
 	default:
 		return fmt.Errorf("unknown command '%s'. Run 'mmq --help' or 'help' for usage", subcmd)
 	}
