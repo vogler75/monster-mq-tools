@@ -42,21 +42,26 @@ func RenderModal(d *DialogModel, width, height int) string {
 		content.WriteString(StyleDim.Render(fmt.Sprintf("Component: %s (%s)", d.Component.Name, d.Component.ID)))
 		content.WriteString("\n\n")
 
-		for i, t := range d.Targets {
-			cursor := "  "
-			if i == d.SelectedIdx {
-				cursor = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Render("❯ ")
+		if len(d.Targets) == 0 {
+			content.WriteString(StyleDim.Render("No build targets configured for this component.\n\n"))
+			content.WriteString(StyleDim.Render("[Esc] Cancel"))
+		} else {
+			for i, t := range d.Targets {
+				cursor := "  "
+				if i == d.SelectedIdx {
+					cursor = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Render("❯ ")
+				}
+				name := t.Name
+				if i == d.SelectedIdx {
+					name = lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(name)
+				}
+				content.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+				content.WriteString(fmt.Sprintf("    %s\n", StyleDim.Render(t.Description)))
 			}
-			name := t.Name
-			if i == d.SelectedIdx {
-				name = lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(name)
-			}
-			content.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
-			content.WriteString(fmt.Sprintf("    %s\n", StyleDim.Render(t.Description)))
-		}
 
-		content.WriteString("\n")
-		content.WriteString(StyleDim.Render("[↑/↓] Select   [Enter] Start Build   [Esc] Cancel"))
+			content.WriteString("\n")
+			content.WriteString(StyleDim.Render("[↑/↓] Select   [Enter] Start Build   [Esc] Cancel"))
+		}
 
 	case DialogPublishTarget:
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary).Render("🚀  CONFIRM PUBLISHING"))
@@ -66,21 +71,26 @@ func RenderModal(d *DialogModel, width, height int) string {
 		content.WriteString(lipgloss.NewStyle().Foreground(ColorWarning).Render("⚠  WARNING: This will upload release assets to external repositories!"))
 		content.WriteString("\n\n")
 
-		for i, t := range d.Targets {
-			cursor := "  "
-			if i == d.SelectedIdx {
-				cursor = lipgloss.NewStyle().Foreground(ColorSecondary).Bold(true).Render("❯ ")
+		if len(d.Targets) == 0 {
+			content.WriteString(StyleDim.Render("No publish targets configured for this component.\n\n"))
+			content.WriteString(StyleDim.Render("[Esc] Cancel"))
+		} else {
+			for i, t := range d.Targets {
+				cursor := "  "
+				if i == d.SelectedIdx {
+					cursor = lipgloss.NewStyle().Foreground(ColorSecondary).Bold(true).Render("❯ ")
+				}
+				name := t.Name
+				if i == d.SelectedIdx {
+					name = lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(name)
+				}
+				content.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
+				content.WriteString(fmt.Sprintf("    %s\n", StyleDim.Render(t.Description)))
 			}
-			name := t.Name
-			if i == d.SelectedIdx {
-				name = lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(name)
-			}
-			content.WriteString(fmt.Sprintf("%s%s\n", cursor, name))
-			content.WriteString(fmt.Sprintf("    %s\n", StyleDim.Render(t.Description)))
-		}
 
-		content.WriteString("\n")
-		content.WriteString(StyleDim.Render("[↑/↓] Select   [Enter] Confirm & Publish   [Esc] Cancel"))
+			content.WriteString("\n")
+			content.WriteString(StyleDim.Render("[↑/↓] Select   [Enter] Confirm & Publish   [Esc] Cancel"))
+		}
 
 	case DialogCleanConfirm:
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorDanger).Render("🗑  CONFIRM CLEAN ARTIFACTS"))

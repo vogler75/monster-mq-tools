@@ -245,3 +245,41 @@ func TestStyleLogLine(t *testing.T) {
 		})
 	}
 }
+
+func TestToolsPublishDialog(t *testing.T) {
+	m, err := NewAppModel("/home/vogler/Workspace/monster")
+	if err != nil {
+		t.Fatalf("Failed to create model: %v", err)
+	}
+
+	// Find tools component index
+	toolsIdx := -1
+	for idx, c := range m.Components {
+		if c.ID == "tools" {
+			toolsIdx = idx
+			break
+		}
+	}
+
+	if toolsIdx == -1 {
+		t.Fatalf("tools component not found in AppModel")
+	}
+
+	m.SelectedIdx = toolsIdx
+	m.updateLogViewerForSelection()
+
+	// Press 'p' to open publish dialog
+	m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+
+	if m.Dialog.Type != DialogPublishTarget {
+		t.Errorf("Expected DialogPublishTarget, got %v", m.Dialog.Type)
+	}
+
+	if len(m.Dialog.Targets) == 0 {
+		t.Errorf("Expected publish targets for tools component, got 0")
+	}
+
+	if m.Dialog.Component.ID != "tools" {
+		t.Errorf("Expected Dialog.Component.ID to be 'tools', got %s", m.Dialog.Component.ID)
+	}
+}

@@ -294,6 +294,10 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		if sel == nil {
 			return nil
 		}
+		if len(sel.BuildTargets) == 0 {
+			m.StatusMsg = fmt.Sprintf("Component '%s' has no build targets configured.", sel.Name)
+			return nil
+		}
 		m.Dialog = DialogModel{
 			Type:        DialogBuildTarget,
 			Component:   sel,
@@ -309,6 +313,10 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		// Publish selected
 		sel := m.selectedComponent()
 		if sel == nil {
+			return nil
+		}
+		if len(sel.PublishTargets) == 0 {
+			m.StatusMsg = fmt.Sprintf("Component '%s' has no publish targets configured.", sel.Name)
 			return nil
 		}
 		m.Dialog = DialogModel{
@@ -460,6 +468,10 @@ func (m *AppModel) executeDialogAction() tea.Cmd {
 	m.Dialog.Type = DialogNone
 
 	if d.Component == nil || len(d.Targets) == 0 {
+		return nil
+	}
+
+	if d.SelectedIdx < 0 || d.SelectedIdx >= len(d.Targets) {
 		return nil
 	}
 

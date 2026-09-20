@@ -101,10 +101,13 @@ cd mbp && ./bin/mbp
 ```bash
 # Publish with confirmation prompt
 ./mbp/bin/mbp publish edge
+./mbp/bin/mbp publish tools
 
 # Publish non-interactively
 ./mbp/bin/mbp publish edge -y
+./mbp/bin/mbp publish tools -y
 ./mbp/bin/mbp publish dashboard --target publish-mac -y
+./mbp/bin/mbp publish tools --target publish-build-all -y
 ```
 
 ### Cleaning Artifacts

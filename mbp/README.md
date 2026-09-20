@@ -119,9 +119,12 @@ Launch the interactive dashboard:
 ```bash
 # Interactive confirmation prompt
 ./bin/mbp publish edge
+./bin/mbp publish tools
 
 # Non-interactive with auto-confirm
 ./bin/mbp publish edge --target publish-all -y
+./bin/mbp publish tools -y
+./bin/mbp publish tools --target publish-build-all -y
 ```
 
 ### Clean Artifacts

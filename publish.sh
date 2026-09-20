@@ -154,14 +154,30 @@ if [ "$AUTO_CONFIRM" = false ]; then
     fi
 fi
 
-# Check / push git tag
-if git rev-parse "$TAG" >/dev/null 2>&1; then
-    if ! git ls-remote --tags origin "$TAG" 2>/dev/null | grep -q "$TAG"; then
-        echo -e "${YELLOW}Tag ${TAG} exists locally but not on remote. Pushing tag...${NC}"
-        git push origin "$TAG" || {
-            echo -e "${YELLOW}Warning: Could not push tag to origin (may need permissions). Continuing...${NC}"
-        }
-    fi
+# Verify / sync git tag on remote
+LOCAL_TAG_SHA=$(git rev-parse -q --verify "refs/tags/${TAG}^{commit}" 2>/dev/null || git rev-parse -q --verify "refs/tags/${TAG}" 2>/dev/null || true)
+REMOTE_TAG_SHA=$(git ls-remote --tags origin "refs/tags/${TAG}" 2>/dev/null | awk '{print $1}')
+
+if [ -z "$LOCAL_TAG_SHA" ] && [ -n "$REMOTE_TAG_SHA" ]; then
+    echo -e "${YELLOW}Tag ${TAG} exists on remote but not locally. Fetching tag...${NC}"
+    git fetch origin "refs/tags/${TAG}:refs/tags/${TAG}" 2>/dev/null || true
+    LOCAL_TAG_SHA=$(git rev-parse -q --verify "refs/tags/${TAG}" 2>/dev/null || true)
+elif [ -z "$LOCAL_TAG_SHA" ]; then
+    echo -e "${YELLOW}Tag ${TAG} does not exist locally. Creating tag ${TAG}...${NC}"
+    git tag "$TAG"
+    LOCAL_TAG_SHA=$(git rev-parse -q --verify "refs/tags/${TAG}" 2>/dev/null || true)
+fi
+
+if [ -z "$REMOTE_TAG_SHA" ]; then
+    echo -e "${YELLOW}Tag ${TAG} is not on remote. Pushing tag now...${NC}"
+    git push origin "$TAG" || {
+        echo -e "${YELLOW}Warning: Could not push tag to origin (may need permissions). Continuing...${NC}"
+    }
+elif [ -n "$LOCAL_TAG_SHA" ] && [ "$LOCAL_TAG_SHA" != "$REMOTE_TAG_SHA" ]; then
+    echo -e "${YELLOW}Remote tag ${TAG} is out of sync with local HEAD. Force-updating remote tag...${NC}"
+    git push -f origin "$TAG" || {
+        echo -e "${YELLOW}Warning: Could not force-push tag to origin. Continuing...${NC}"
+    }
 fi
 
 # Upload or create release

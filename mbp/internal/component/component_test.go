@@ -33,3 +33,48 @@ func TestFindMonsterRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestComponentTargets(t *testing.T) {
+	root, err := FindMonsterRoot("")
+	if err != nil {
+		t.Fatalf("failed to find monster root: %v", err)
+	}
+
+	comps := GetStandardRegistry(root)
+	toolsComp, err := FindComponent(comps, "tools")
+	if err != nil {
+		t.Fatalf("tools component not found: %v", err)
+	}
+
+	// Verify build targets
+	if toolsComp.DefaultBuild.Command == "" {
+		t.Errorf("tools component has empty DefaultBuild command")
+	}
+	if len(toolsComp.BuildTargets) == 0 {
+		t.Errorf("tools component has no BuildTargets")
+	}
+
+	// Verify publish targets
+	if toolsComp.DefaultPublish.Command == "" {
+		t.Errorf("tools component has empty DefaultPublish command")
+	}
+	if len(toolsComp.PublishTargets) == 0 {
+		t.Errorf("tools component has no PublishTargets")
+	}
+
+	// Verify all components have default build and publish targets
+	for _, c := range comps {
+		if c.DefaultBuild.Command == "" {
+			t.Errorf("component %s has empty DefaultBuild command", c.ID)
+		}
+		if len(c.BuildTargets) == 0 {
+			t.Errorf("component %s has no BuildTargets", c.ID)
+		}
+		if c.DefaultPublish.Command == "" {
+			t.Errorf("component %s has empty DefaultPublish command", c.ID)
+		}
+		if len(c.PublishTargets) == 0 {
+			t.Errorf("component %s has no PublishTargets", c.ID)
+		}
+	}
+}

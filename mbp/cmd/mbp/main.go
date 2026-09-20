@@ -158,11 +158,36 @@ func runStatusCmd(args []string) {
 	}
 }
 
+// reorderArgs moves flags before positional arguments so that Go's flag.FlagSet
+// parses them regardless of argument order (e.g. `publish tools -y` or `publish -y tools`).
+func reorderArgs(args []string) []string {
+	var flags []string
+	var pos []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			pos = append(pos, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			// If the flag takes a value separated by a space
+			if (arg == "--target" || arg == "-target" || arg == "--root" || arg == "-root") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				flags = append(flags, args[i+1])
+				i++
+			}
+		} else {
+			pos = append(pos, arg)
+		}
+	}
+	return append(flags, pos...)
+}
+
 func runBuildCmd(args []string) {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	rootFlag := fs.String("root", "", "Path to monster repositories root")
 	targetFlag := fs.String("target", "", "Explicit target ID")
-	_ = fs.Parse(args)
+	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to build (main, edge, dashboard, explorer, tools) or 'all'\n")
@@ -219,6 +244,11 @@ func runBuildCmd(args []string) {
 		}
 	}
 
+	if target.Command == "" {
+		fmt.Fprintf(os.Stderr, "Error: Component '%s' has no build target configured\n", comp.ID)
+		os.Exit(1)
+	}
+
 	fmt.Printf("Building %s (%s) using target '%s': %s %s\n\n", comp.Name, comp.ID, target.Name, target.Command, strings.Join(target.Args, " "))
 	if err := executeTaskCLI(comp.ID, "build", target, comp.Directory); err != nil {
 		os.Exit(1)
@@ -228,7 +258,7 @@ func runBuildCmd(args []string) {
 func runPullCmd(args []string) {
 	fs := flag.NewFlagSet("pull", flag.ExitOnError)
 	rootFlag := fs.String("root", "", "Path to monster repositories root")
-	_ = fs.Parse(args)
+	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to pull (main, edge, dashboard, explorer, tools) or 'all'\n")
@@ -297,10 +327,11 @@ func runPublishCmd(args []string) {
 	rootFlag := fs.String("root", "", "Path to monster repositories root")
 	targetFlag := fs.String("target", "", "Explicit target ID")
 	yesFlag := fs.Bool("y", false, "Auto-confirm")
-	_ = fs.Parse(args)
+	fs.BoolVar(yesFlag, "yes", false, "Auto-confirm")
+	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (main, edge, dashboard, explorer)\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (main, edge, dashboard, explorer, tools)\n")
 		os.Exit(1)
 	}
 
@@ -339,6 +370,11 @@ func runPublishCmd(args []string) {
 		}
 	}
 
+	if target.Command == "" {
+		fmt.Fprintf(os.Stderr, "Error: Component '%s' has no publish target configured\n", comp.ID)
+		os.Exit(1)
+	}
+
 	if !*yesFlag {
 		fmt.Printf("Are you sure you want to publish %s (v%s)? [y/N]: ", comp.Name, comp.Version)
 		var response string
@@ -358,7 +394,7 @@ func runPublishCmd(args []string) {
 func runCleanCmd(args []string) {
 	fs := flag.NewFlagSet("clean", flag.ExitOnError)
 	rootFlag := fs.String("root", "", "Path to monster repositories root")
-	_ = fs.Parse(args)
+	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to clean (main, edge, dashboard, explorer, tools) or 'all'\n")
