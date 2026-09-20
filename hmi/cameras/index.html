@@ -207,7 +207,7 @@
         <!-- Topic input form if no topic URL argument provided -->
         <form id="topic-form">
             <label for="input-topic">MQTT Topic Name</label>
-            <input type="text" id="input-topic" placeholder="e.g. cameras/sick264/capture/latest/pic" required autofocus>
+            <input type="text" id="input-topic" placeholder="e.g. cameras/main/capture/latest/pic" required autofocus>
             <label for="input-broker">WebSocket Broker URL</label>
             <input type="text" id="input-broker" value="" required>
             <button type="submit">View Stream</button>
@@ -234,7 +234,7 @@
 
             // Parse URL parameters
             const urlParams = new URLSearchParams(window.location.search);
-            const topicParam = urlParams.get('topic') || urlParams.get('t') || window.location.hash.replace(/^#/, '');
+            const topicParam = urlParams.get('topic') || urlParams.get('t') || window.location.hash.replace(/^#/, '') || 'cameras/main/capture/latest/pic';
             const brokerParam = urlParams.get('broker') || urlParams.get('ws') || defaultBroker;
             const fitParam = urlParams.get('fit') || 'contain'; // 'contain' or 'cover'
 
