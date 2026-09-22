@@ -390,6 +390,15 @@
             from { transform: translateY(100%); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
+
+        /* Suppress transitions and animations during atomic tab restore / sync */
+        .no-transitions,
+        .no-transitions *,
+        .no-transitions *::before,
+        .no-transitions *::after {
+            transition: none !important;
+            animation: none !important;
+        }
     </style>
 </head>
 <body>
@@ -929,9 +938,102 @@
             }
         }
 
+        // --- Decoupled Telemetry Ingestion & Pattern A Headless State ---
+        const telemetryState = {
+            temp: null,
+            press: null,
+            speed: null,
+            lastSignal: '',
+            isCatchingUp: false
+        };
+        const topicTimestamps = new Map();
+        let uiRenderScheduled = false;
+        let foregroundSettleTimer = null;
+
+        function triggerCatchUpMode() {
+            telemetryState.isCatchingUp = true;
+            document.body.classList.add('no-transitions');
+            if (foregroundSettleTimer) clearTimeout(foregroundSettleTimer);
+            foregroundSettleTimer = setTimeout(() => {
+                telemetryState.isCatchingUp = false;
+                renderAllToUI();
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        document.body.classList.remove('no-transitions');
+                    });
+                });
+            }, 120);
+        }
+
+        function scheduleUiRender() {
+            if (document.hidden || telemetryState.isCatchingUp) return;
+            if (uiRenderScheduled) return;
+            uiRenderScheduled = true;
+            requestAnimationFrame(() => {
+                uiRenderScheduled = false;
+                if (!document.hidden && !telemetryState.isCatchingUp) {
+                    renderAllToUI();
+                }
+            });
+        }
+
+        function renderAllToUI() {
+            if (telemetryState.lastSignal) {
+                const el = document.getElementById('lastUpdateText');
+                if (el) el.textContent = telemetryState.lastSignal;
+            }
+            if (telemetryState.temp !== null) {
+                const el = document.getElementById('valTemp');
+                if (el && el.childNodes[0]) el.childNodes[0].nodeValue = telemetryState.temp.toFixed(1) + ' ';
+            }
+            if (telemetryState.press !== null) {
+                const el = document.getElementById('valPress');
+                if (el && el.childNodes[0]) el.childNodes[0].nodeValue = telemetryState.press.toFixed(2) + ' ';
+            }
+            if (telemetryState.speed !== null) {
+                const el = document.getElementById('valSpeed');
+                if (el && el.childNodes[0]) el.childNodes[0].nodeValue = Math.round(telemetryState.speed) + ' ';
+            }
+            if (telemetryChart) {
+                telemetryChart.update('none');
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                document.body.classList.add('no-transitions');
+                telemetryState.isCatchingUp = true;
+                renderAllToUI();
+                if (foregroundSettleTimer) clearTimeout(foregroundSettleTimer);
+                foregroundSettleTimer = setTimeout(() => {
+                    telemetryState.isCatchingUp = false;
+                    renderAllToUI();
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            document.body.classList.remove('no-transitions');
+                        });
+                    });
+                }, 120);
+            } else {
+                if (foregroundSettleTimer) {
+                    clearTimeout(foregroundSettleTimer);
+                    foregroundSettleTimer = null;
+                }
+            }
+        });
+
         function handleTopicMessage(topic, payloadStr, timestamp) {
-            const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString();
-            document.getElementById('lastUpdateText').textContent = `Last signal: ${topic} @ ${timeStr}`;
+            const msgTs = timestamp ? new Date(timestamp).getTime() : Date.now();
+            const lastTs = topicTimestamps.get(topic);
+            if (lastTs && msgTs < lastTs) return;
+            topicTimestamps.set(topic, msgTs);
+
+            if (!document.hidden && (Date.now() - msgTs > 1500)) {
+                triggerCatchUpMode();
+            }
+
+            const timeStr = new Date(msgTs).toLocaleTimeString();
+            telemetryState.lastSignal = `Last signal: ${topic} @ ${timeStr}`;
 
             let val = payloadStr;
             try { val = JSON.parse(payloadStr); } catch(e) {}
@@ -940,25 +1042,28 @@
 
             if (topic === 'telemetry/temperature' || topic.endsWith('/temperature')) {
                 if (!isNaN(numericVal)) {
-                    document.getElementById('valTemp').childNodes[0].nodeValue = numericVal.toFixed(1) + ' ';
+                    telemetryState.temp = numericVal;
                     updateChartData(timeStr, numericVal, null, null);
                 }
             } else if (topic === 'telemetry/pressure' || topic.endsWith('/pressure')) {
                 if (!isNaN(numericVal)) {
-                    document.getElementById('valPress').childNodes[0].nodeValue = numericVal.toFixed(2) + ' ';
+                    telemetryState.press = numericVal;
                     updateChartData(timeStr, null, numericVal, null);
                 }
             } else if (topic === 'telemetry/motorspeed' || topic.endsWith('/motorspeed')) {
                 if (!isNaN(numericVal)) {
-                    document.getElementById('valSpeed').childNodes[0].nodeValue = Math.round(numericVal) + ' ';
+                    telemetryState.speed = numericVal;
                     updateChartData(timeStr, null, null, numericVal / 10.0);
                 }
             } else if (topic.startsWith('controls/')) {
                 showToast(`Received control update: ${topic} => ${payloadStr}`);
             }
+
+            scheduleUiRender();
         }
 
         function updateChartData(timeLabel, tempVal, pressVal, speedVal) {
+            if (!telemetryChart) return;
             const labels = telemetryChart.data.labels;
             const dsTemp = telemetryChart.data.datasets[0].data;
             const dsPress = telemetryChart.data.datasets[1].data;
@@ -983,8 +1088,6 @@
                 dsPress.shift();
                 dsSpeed.shift();
             }
-
-            telemetryChart.update('none');
         }
 
         // --- 5. Demo Simulator ---
