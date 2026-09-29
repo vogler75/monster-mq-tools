@@ -61,21 +61,24 @@
 
 ### Prerequisites
 - [Go 1.20+](https://go.dev/doc/install) (for building from source)
-- `bash` (for using `./build.sh`)
+- `bash` (for `./build.sh` on Linux/macOS) or PowerShell (for `.\build.ps1` on Windows)
 
 ### Build from Source
 
-You can build `mmq` using the included build script:
+You can build `mmq` using the included build scripts:
 
 ```bash
-# Build native binary for current OS/architecture (output placed in bin/mmq)
-./build.sh
+# Linux / macOS (Bash)
+./build.sh            # Native binary (placed in bin/mmq)
+./build.sh --all      # Cross-compile for Linux, macOS, Windows
+./build.sh --clean    # Clean output directory
+```
 
-# Cross-compile binaries for all supported platforms (Linux, macOS, Windows)
-./build.sh --all
-
-# Clean output directory
-./build.sh --clean
+```powershell
+# Windows (PowerShell)
+.\build.ps1           # Native binary (placed in bin/mmq.exe)
+.\build.ps1 -All      # Cross-compile for Linux, macOS, Windows
+.\build.ps1 -Clean    # Clean output directory
 ```
 
 Alternatively, compile directly with standard `go`:
