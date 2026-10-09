@@ -11,7 +11,7 @@ This skill provides operational instructions and command references for using `m
 
 ## Quick Reference & Binary Location
 
-- **Binary Location**: `cli/bin/mmq` (built via `cd cli && ./build.sh` or `cd cli && go build -o bin/mmq .`)
+- **Binary Location**: `cli/bin/mmq` / `cli/bin/mmq.exe` (built via `cd cli && ./build.sh`, `cd cli && .\build.ps1`, or `cd cli && go build -o bin/mmq .`)
 - **Default Endpoint**: `http://localhost:4000/graphql`
 - **Configuration Sources**:
   - CLI flags: `--url`, `--host`, `--port`, `--mqtt-host`, `--mqtt-port`, `--https`, `--user`, `--pass`, `--token`, `-i`

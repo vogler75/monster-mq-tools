@@ -39,11 +39,13 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 - **Broker Target Support**:
   - **Full Broker**: Supports complete historical archives, daily counts, and multi-topic aggregations.
   - **Edge Broker**: Supports localized topic value inspection/publishing, edge device sync, and feature discovery (`features`).
-- **Build System**: Cross-compilation and build management are driven by `cli/build.sh` into `cli/bin/`.
+- **Build System**: Cross-compilation and build management are driven by `cli/build.sh` (Linux/macOS) and `cli/build.ps1` (Windows) into `cli/bin/`.
 
 ---
 
 ## Testing & Verification
 
 - Run unit tests: `cd cli && go test ./...`
-- Verify CLI execution: `cd cli && ./build.sh && bin/mmq --help`
+- Verify CLI execution:
+  - Linux/macOS: `cd cli && ./build.sh && bin/mmq --help`
+  - Windows: `cd cli && .\build.ps1 && .\bin\mmq.exe --help`

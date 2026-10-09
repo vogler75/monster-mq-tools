@@ -29,11 +29,16 @@ The primary CLI tool is located in the [`cli/`](cli) directory.
 # Navigate to the CLI directory
 cd cli
 
-# Build native binary for host OS (output placed in cli/bin/mmq)
-./build.sh
+# Linux / macOS (Bash)
+./build.sh          # Native binary (placed in bin/mmq)
+./build.sh --all    # Cross-compile binaries for Linux, macOS, and Windows
+```
 
-# Cross-compile binaries for Linux, macOS, and Windows
-./build.sh --all
+```powershell
+# Windows (PowerShell)
+cd cli
+.\build.ps1         # Native binary (placed in bin\mmq.exe)
+.\build.ps1 -All    # Cross-compile binaries for Linux, macOS, and Windows
 ```
 
 ### Usage Examples
