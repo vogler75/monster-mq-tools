@@ -326,6 +326,20 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			SelectedIdx: 0,
 		}
 
+	case "v", "d":
+		// Prepare next dev version
+		sel := m.selectedComponent()
+		if sel == nil || sel.DevVersionTarget == nil {
+			m.StatusMsg = "Selected component does not support dev version bump."
+			return nil
+		}
+		m.Dialog = DialogModel{
+			Type:        DialogDevVersionConfirm,
+			Component:   sel,
+			Targets:     []component.Target{*sel.DevVersionTarget},
+			SelectedIdx: 0,
+		}
+
 	case "c":
 		// Clean selected
 		sel := m.selectedComponent()
@@ -484,6 +498,8 @@ func (m *AppModel) executeDialogAction() tea.Cmd {
 		return m.startTaskCmd(d.Component.ID, "publish", target)
 	case DialogCleanConfirm:
 		return m.startTaskCmd(d.Component.ID, "clean", target)
+	case DialogDevVersionConfirm:
+		return m.startTaskCmd(d.Component.ID, "dev", target)
 	}
 	return nil
 }
@@ -580,6 +596,8 @@ func (m *AppModel) startTaskCmd(componentID, action string, target component.Tar
 		comp.Status = component.StatusPublishing
 	} else if action == "pull" {
 		comp.Status = component.StatusPulling
+	} else if action == "dev" {
+		comp.Status = component.StatusBumping
 	}
 
 	return func() tea.Msg {
@@ -804,6 +822,7 @@ func (m *AppModel) renderFooter() string {
 				"[b] Build",
 				"[u] Pull",
 				"[p] Publish",
+				"[v] Dev",
 				"[f] Full Log",
 				"[?] Help",
 				"[q] Quit",
@@ -817,6 +836,7 @@ func (m *AppModel) renderFooter() string {
 				"[u] Pull",
 				"[U] Pull All",
 				"[p] Publish",
+				"[v] Dev",
 				"[c] Clean",
 				"[f] Full Log",
 				"[x] Kill",

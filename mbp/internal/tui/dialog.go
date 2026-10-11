@@ -16,6 +16,7 @@ const (
 	DialogBuildTarget
 	DialogPublishTarget
 	DialogCleanConfirm
+	DialogDevVersionConfirm
 	DialogHelp
 )
 
@@ -98,6 +99,13 @@ func RenderModal(d *DialogModel, width, height int) string {
 		content.WriteString(fmt.Sprintf("Are you sure you want to clean build outputs for %s?\n\n", d.Component.Name))
 		content.WriteString(StyleDim.Render("[Enter] Clean   [Esc] Cancel"))
 
+	case DialogDevVersionConfirm:
+		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("🌱  PREPARE NEXT DEV VERSION"))
+		content.WriteString("\n\n")
+		content.WriteString(fmt.Sprintf("Advance %s (current: %s) to the next development version?\n", d.Component.Name, d.Component.Version))
+		content.WriteString(StyleDim.Render("This will increment the patch version, append -dev, commit and push to origin/main.\n\n"))
+		content.WriteString(StyleDim.Render("[Enter] Prepare Dev Version   [Esc] Cancel"))
+
 	case DialogHelp:
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("📖  MBP KEYBOARD SHORTCUTS"))
 		content.WriteString("\n\n")
@@ -111,6 +119,7 @@ func RenderModal(d *DialogModel, width, height int) string {
 			{"[u]", "Git pull latest updates for selected component"},
 			{"[U]", "Git pull latest updates for ALL components"},
 			{"[p]", "Publish selected component to GitHub / Docker"},
+			{"[v] or [d]", "Prepare next development version (bump-dev.sh)"},
 			{"[c]", "Clean build outputs for selected component"},
 			{"[r]", "Refresh status without fetching remote"},
 			{"[Enter] / [f]", "Open / toggle full-screen live log viewer"},

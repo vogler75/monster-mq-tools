@@ -16,6 +16,7 @@ const (
 	StatusBuilding   BuildStatus = "Building"
 	StatusPublishing BuildStatus = "Publishing"
 	StatusPulling    BuildStatus = "Pulling"
+	StatusBumping    BuildStatus = "Bumping"
 	StatusSuccess    BuildStatus = "Success"
 	StatusFailed     BuildStatus = "Failed"
 )
@@ -56,6 +57,7 @@ type Component struct {
 	DefaultPublish  Target   `json:"default_publish"`
 
 	CleanTarget     *Target  `json:"clean_target,omitempty"`
+	DevVersionTarget *Target `json:"dev_version_target,omitempty"`
 
 	ArtifactGlobs   []string `json:"artifact_globs"`
 	Artifacts       []ArtifactInfo `json:"artifacts"`

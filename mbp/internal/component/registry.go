@@ -128,6 +128,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 				Command:     "./build.sh",
 				Args:        []string{"--clean"},
 			},
+			DevVersionTarget: &Target{
+				ID:          "bump-dev",
+				Name:        "Prepare Dev Version",
+				Description: "Advance to next development version (bump-dev.sh)",
+				Command:     "./bump-dev.sh",
+				Args:        []string{},
+			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All",
@@ -222,6 +229,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 				Description: "Clean build output directories",
 				Command:     "./build.sh",
 				Args:        []string{"--clean"},
+			},
+			DevVersionTarget: &Target{
+				ID:          "bump-dev",
+				Name:        "Prepare Dev Version",
+				Description: "Advance to next development version (bump-dev.sh)",
+				Command:     "./bump-dev.sh",
+				Args:        []string{},
 			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
@@ -319,6 +333,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 				Command:     "./build.sh",
 				Args:        []string{"--clean"},
 			},
+			DevVersionTarget: &Target{
+				ID:          "bump-dev",
+				Name:        "Prepare Dev Version",
+				Description: "Advance to next development version (bump-dev.sh)",
+				Command:     "./bump-dev.sh",
+				Args:        []string{},
+			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All",
@@ -408,6 +429,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 					Command:     "./build-docker.sh",
 					Args:        []string{},
 				},
+			},
+			DevVersionTarget: &Target{
+				ID:          "bump-dev",
+				Name:        "Prepare Dev Version",
+				Description: "Advance to next development version (bump-dev.sh)",
+				Command:     "./bump-dev.sh",
+				Args:        []string{},
 			},
 			DefaultPublish: Target{
 				ID:          "publish",

@@ -37,6 +37,9 @@ func main() {
 		case "clean":
 			runCleanCmd(os.Args[2:])
 			return
+		case "dev", "bump-dev", "dev-version":
+			runDevVersionCmd(os.Args[2:])
+			return
 		case "version", "--version", "-v":
 			fmt.Printf("mbp (Monster Build Pipeline) version %s\n", Version)
 			return
@@ -59,6 +62,7 @@ USAGE:
   mbp build <comp|all> [flags]   Build a component or all components headlessly
   mbp pull <comp|all> [flags]    Pull latest git updates for component or all
   mbp publish <comp> [flags]     Publish release assets headlessly
+  mbp dev <comp|all> [flags]     Advance component(s) to next dev version (bump-dev)
   mbp clean <comp|all> [flags]   Clean build artifacts
   mbp version                    Display version
 
@@ -129,8 +133,8 @@ func runStatusCmd(args []string) {
 	}
 
 	fmt.Printf("MonsterMQ Components Status (Root: %s)\n\n", rootDir)
-	fmt.Printf("%-12s %-10s %-24s %-14s %s\n", "COMPONENT", "VERSION", "GIT STATUS", "BUILD STATUS", "ARTIFACT")
-	fmt.Println(strings.Repeat("─", 80))
+	fmt.Printf("%-12s %-16s %-24s %-14s %s\n", "COMPONENT", "VERSION", "GIT STATUS", "BUILD STATUS", "ARTIFACT")
+	fmt.Println(strings.Repeat("─", 86))
 
 	for _, c := range comps {
 		gitStr := "no git"
@@ -154,7 +158,11 @@ func runStatusCmd(args []string) {
 			artStr = fmt.Sprintf("%s (%d bytes)", c.LatestArtifact.Name, c.LatestArtifact.Size)
 		}
 
-		fmt.Printf("%-12s %-10s %-24s %-14s %s\n", c.ID, c.Version, gitStr, string(c.Status), artStr)
+		vStr := c.Version
+		if vStr != "" && vStr != "unknown" && !strings.HasPrefix(vStr, "v") {
+			vStr = "v" + vStr
+		}
+		fmt.Printf("%-12s %-16s %-24s %-14s %s\n", c.ID, vStr, gitStr, string(c.Status), artStr)
 	}
 }
 
@@ -437,6 +445,71 @@ func runCleanCmd(args []string) {
 	}
 
 	if err := executeTaskCLI(comp.ID, "clean", *comp.CleanTarget, comp.Directory); err != nil {
+		os.Exit(1)
+	}
+}
+
+func runDevVersionCmd(args []string) {
+	fs := flag.NewFlagSet("dev", flag.ExitOnError)
+	rootFlag := fs.String("root", "", "Path to monster repositories root")
+	versionFlag := fs.String("version", "", "Explicit dev version (e.g. 1.8.35-dev)")
+	_ = fs.Parse(reorderArgs(args))
+
+	if fs.NArg() == 0 {
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to prepare dev version (main, edge, dashboard, explorer) or 'all'\n")
+		os.Exit(1)
+	}
+
+	targetComp := fs.Arg(0)
+	rootDir, err := component.FindMonsterRoot(*rootFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	comps, err := component.LoadAndRefreshAll(rootDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	buildTargetWithArgs := func(base *component.Target) component.Target {
+		t := *base
+		if *versionFlag != "" {
+			t.Args = append([]string{}, t.Args...)
+			t.Args = append(t.Args, *versionFlag)
+		}
+		return t
+	}
+
+	if targetComp == "all" {
+		for _, c := range comps {
+			if c.DevVersionTarget != nil {
+				fmt.Printf("\n=== Advancing %s (%s) ===\n", c.Name, c.ID)
+				t := buildTargetWithArgs(c.DevVersionTarget)
+				if err := executeTaskCLI(c.ID, "dev", t, c.Directory); err != nil {
+					fmt.Fprintf(os.Stderr, "✘ Failed to advance %s: %v\n", c.ID, err)
+				}
+			}
+		}
+		fmt.Println("\n✔ Dev version preparation complete for all supported components.")
+		return
+	}
+
+	comp, err := component.FindComponent(comps, targetComp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if comp.DevVersionTarget == nil {
+		fmt.Fprintf(os.Stderr, "Error: Component '%s' does not have a dev version target configured\n", comp.ID)
+		os.Exit(1)
+	}
+
+	t := buildTargetWithArgs(comp.DevVersionTarget)
+	fmt.Printf("Advancing %s (%s) to next dev version...\n\n", comp.Name, comp.ID)
+	if err := executeTaskCLI(comp.ID, "dev", t, comp.Directory); err != nil {
 		os.Exit(1)
 	}
 }

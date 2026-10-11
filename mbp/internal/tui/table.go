@@ -19,12 +19,12 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 	// Fixed columns:
 	// prefix: 2 ("❯ " or "  ")
 	// compCol: 12
-	// versionCol: 9
+	// versionCol: 15
 	// gitCol: 18
 	// buildCol: 14
 	// Spaces between columns: 4 (1 each between 5 items)
-	// Total fixed = 2 + 12 + 1 + 9 + 1 + 18 + 1 + 14 + 1 = 59
-	fixedWidth := 59
+	// Total fixed = 2 + 12 + 1 + 15 + 1 + 18 + 1 + 14 + 1 = 65
+	fixedWidth := 65
 	artWidth := availWidth - fixedWidth
 	if artWidth < 10 {
 		artWidth = 10
@@ -32,7 +32,7 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 
 	// Table Header
 	headerCols := fmt.Sprintf(
-		"  %-12s %-9s %-18s %-14s %s",
+		"  %-12s %-15s %-18s %-14s %s",
 		"COMPONENT", "VERSION", "GIT STATUS", "BUILD STATUS", "LATEST ARTIFACT",
 	)
 	if lipgloss.Width(headerCols) > availWidth {
@@ -68,10 +68,10 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 		} else if !strings.HasPrefix(vStr, "v") {
 			vStr = "v" + vStr
 		}
-		if len(vStr) > 9 {
-			vStr = vStr[:9]
+		if len(vStr) > 15 {
+			vStr = vStr[:15]
 		}
-		versionCol := fmt.Sprintf("%-9s", vStr)
+		versionCol := fmt.Sprintf("%-15s", vStr)
 
 		// 4. Git Status string
 		gitCol := renderGitStatus(c, 18)
