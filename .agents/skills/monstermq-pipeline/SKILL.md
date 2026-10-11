@@ -14,7 +14,7 @@ This skill provides operational instructions and command references for using `m
 - **Directory**: [`mbp/`](file:///Users/vogler/Workspace/monster/tools/mbp/)
 - **Binary Location**: `mbp/bin/mbp` (built via `cd mbp && ./build.sh`)
 - **Default Target Components**:
-  - `main`: MonsterMQ Main Broker (`../main`)
+  - `main`: MonsterMQ Core (`../main`)
   - `edge`: MonsterMQ Edge Broker (`../edge`)
   - `dashboard`: MonsterMQ Dashboard (`../dashboard`)
   - `explorer`: MonsterMQ Explorer (`../explorer`)

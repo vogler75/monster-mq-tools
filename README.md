@@ -104,17 +104,17 @@ For GraphQL schema parity and Edge broker adaptation specifications, see [`EDGE_
 ## GraphQL Schemas & Utilities
 
 Current GraphQL SDL schemas are stored under [`gql/`](gql/):
-- **[`gql/main.gql`](gql/main.gql)**: Main Broker GraphQL schema (`http://localhost:4000/graphql`).
+- **[`gql/main.gql`](gql/main.gql)**: MonsterMQ Core GraphQL schema (`http://localhost:4000/graphql`).
 - **[`gql/edge.gql`](gql/edge.gql)**: Edge Broker GraphQL schema (`http://localhost:4001/graphql`).
 
 ### Re-fetching Schemas
 To fetch and update schemas from running broker instances:
 
 ```bash
-# Fetch both Main and Edge schemas
+# Fetch both MonsterMQ Core and Edge schemas
 ./gql/fetch-schemas.sh
 
-# Fetch only Main Broker schema
+# Fetch only MonsterMQ Core schema
 ./gql/fetch-schemas.sh -m
 
 # Fetch only Edge Broker schema

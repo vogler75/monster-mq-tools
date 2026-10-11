@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# fetch-schemas.sh - Fetch GraphQL SDL schemas from MonsterMQ Main & Edge brokers
+# fetch-schemas.sh - Fetch GraphQL SDL schemas from MonsterMQ Core & Edge brokers
 
 SCRIPT_NAME="$(basename "$0")"
 
@@ -8,10 +8,10 @@ show_help() {
     cat << EOF
 Usage: $SCRIPT_NAME [OPTIONS] [URL...]
 
-Fetch GraphQL SDL schemas from running MonsterMQ Main & Edge brokers.
+Fetch GraphQL SDL schemas from running MonsterMQ Core & Edge brokers.
 
 Options:
-  -m, --main     Fetch only the Main Broker schema
+  -m, --main     Fetch only the MonsterMQ Core schema
   -e, --edge     Fetch only the Edge Broker schema
   -a, --all      Fetch both schemas (default behavior)
   -c, --compare  Compare fetched schemas after fetching
@@ -19,21 +19,21 @@ Options:
 
 Arguments:
   When fetching both (default):
-    [MAIN_URL]   URL for Main Broker (default: http://localhost:4000/graphql)
+    [MAIN_URL]   URL for MonsterMQ Core (default: http://localhost:4000/graphql)
     [EDGE_URL]   URL for Edge Broker (default: http://localhost:4001/graphql)
 
   When fetching only one (-m or -e):
     [URL]        URL for the specified broker
 
 Environment Variables:
-  MAIN_URL       Override default Main Broker URL
+  MAIN_URL       Override default MonsterMQ Core URL
   EDGE_URL       Override default Edge Broker URL
 
 Examples:
   ./$SCRIPT_NAME                              # Fetch both brokers (default URLs)
-  ./$SCRIPT_NAME -m                           # Fetch only Main Broker
+  ./$SCRIPT_NAME -m                           # Fetch only MonsterMQ Core
   ./$SCRIPT_NAME -e                           # Fetch only Edge Broker
-  ./$SCRIPT_NAME -m http://host:4000/graphql  # Fetch Main from custom URL
+  ./$SCRIPT_NAME -m http://host:4000/graphql  # Fetch MonsterMQ Core from custom URL
   ./$SCRIPT_NAME -e http://host:4001/graphql  # Fetch Edge from custom URL
   ./$SCRIPT_NAME http://m:4000/graphql http://e:4001/graphql
 EOF
@@ -102,7 +102,7 @@ mkdir -p "$OUTPUT_DIR"
 
 echo "Fetching GraphQL schemas..."
 if [ "$FETCH_MAIN" = true ]; then
-    echo "  Main Broker: $MAIN_URL"
+    echo "  MonsterMQ Core: $MAIN_URL"
 fi
 if [ "$FETCH_EDGE" = true ]; then
     echo "  Edge Broker: $EDGE_URL"
@@ -145,7 +145,7 @@ fetch_schema() {
 HAS_ERROR=0
 
 if [ "$FETCH_MAIN" = true ]; then
-    fetch_schema "Main Broker" "$MAIN_URL" "$OUTPUT_DIR/main.gql" || HAS_ERROR=1
+    fetch_schema "MonsterMQ Core" "$MAIN_URL" "$OUTPUT_DIR/main.gql" || HAS_ERROR=1
 fi
 
 if [ "$FETCH_EDGE" = true ]; then

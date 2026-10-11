@@ -64,7 +64,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 	components := []*Component{
 		{
 			ID:          "main",
-			Name:        "MonsterMQ Main Broker",
+			Name:        "MonsterMQ Core",
 			Description: "Core Enterprise MQTT Broker, Java distribution & Setup binaries",
 			Directory:   filepath.Join(rootDir, "main"),
 			VersionFiles: []string{

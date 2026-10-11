@@ -63,7 +63,7 @@ USAGE:
   mbp version                    Display version
 
 COMPONENTS:
-  main        MonsterMQ Main Broker
+  main        MonsterMQ Core
   edge        MonsterMQ Edge Broker
   dashboard   MonsterMQ Dashboard
   explorer    MonsterMQ Explorer

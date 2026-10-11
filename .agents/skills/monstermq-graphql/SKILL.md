@@ -1,12 +1,12 @@
 ---
 name: monstermq-graphql
 description: >
-  Comprehensive reference and developer guide for querying, publishing, reading history, and subscribing to real-time topic data via MonsterMQ's GraphQL interface (Edge & Main brokers). Use this skill when building web HMIs, telemetry dashboards, analytics tools, or frontend data integrations.
+  Comprehensive reference and developer guide for querying, publishing, reading history, and subscribing to real-time topic data via MonsterMQ's GraphQL interface (MonsterMQ Edge & MonsterMQ Core brokers). Use this skill when building web HMIs, telemetry dashboards, analytics tools, or frontend data integrations.
 ---
 
 # MonsterMQ Data GraphQL Skill Guide
 
-This skill provides complete schemas, query patterns, and JavaScript code examples for fetching, streaming, publishing, and archiving telemetry and topic data from **MonsterMQ Broker** (Full/Main and Edge nodes) via GraphQL.
+This skill provides complete schemas, query patterns, and JavaScript code examples for fetching, streaming, publishing, and archiving telemetry and topic data from **MonsterMQ Broker** (Core and Edge nodes) via GraphQL.
 
 ---
 

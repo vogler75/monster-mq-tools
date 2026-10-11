@@ -158,7 +158,7 @@ See `cli/README.md` for the complete reference and configuration semantics.
 
 ### Broker Script Management & AI Skills
 
-`mmq script` provides complete lifecycle management for standalone broker scripts (Starlark on Edge Broker; Python 3 & JavaScript on Main Broker), dry-run testing in an interactive sandbox, execution log inspection, and dynamic AI Skill export.
+`mmq script` provides complete lifecycle management for standalone broker scripts (Starlark on Edge Broker; Python 3 & JavaScript on MonsterMQ Core), dry-run testing in an interactive sandbox, execution log inspection, and dynamic AI Skill export.
 
 #### 1. Discovery & Inspection
 ```bash
@@ -230,7 +230,7 @@ mmq script logs HighTempAlert
 ```
 
 #### 5. Fetching Broker Documentation & AI Skills
-Both Edge and Main brokers authoritatively deliver documentation and AI skills for their supported runtimes via GraphQL:
+Both Edge and MonsterMQ Core brokers authoritatively deliver documentation and AI skills for their supported runtimes via GraphQL:
 ```bash
 # View Markdown API documentation for the broker's scripting runtime
 mmq script docs

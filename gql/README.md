@@ -1,10 +1,10 @@
 # MonsterMQ GraphQL Schemas & Comparison Tool
 
-This directory contains the GraphQL SDL schemas for MonsterMQ Full (Main) Broker and Edge Broker, along with tooling to fetch live schemas from running brokers and compare them.
+This directory contains the GraphQL SDL schemas for MonsterMQ Core and Edge Broker, along with tooling to fetch live schemas from running brokers and compare them.
 
 ## Files
 
-- `main.gql`: GraphQL SDL schema exported from a running MonsterMQ Main Broker.
+- `main.gql`: GraphQL SDL schema exported from a running MonsterMQ Core.
 - `edge.gql`: GraphQL SDL schema exported from a running MonsterMQ Edge Broker.
 - `fetch-schemas.sh`: Shell script to fetch live GraphQL SDL schemas from running brokers.
 - `compare-schemas.sh`: Convenience launcher for the schema comparison program.
@@ -18,10 +18,10 @@ This directory contains the GraphQL SDL schemas for MonsterMQ Full (Main) Broker
 Use `fetch-schemas.sh` to update `main.gql` and `edge.gql` from running brokers:
 
 ```bash
-# Fetch both Main (localhost:4000) and Edge (localhost:4001)
+# Fetch both Core (localhost:4000) and Edge (localhost:4001)
 ./fetch-schemas.sh
 
-# Fetch only Main Broker
+# Fetch only MonsterMQ Core
 ./fetch-schemas.sh -m http://localhost:4000/graphql
 
 # Fetch only Edge Broker
