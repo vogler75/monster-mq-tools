@@ -7,7 +7,6 @@ import (
 	"io"
 	"os/exec"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -106,10 +105,7 @@ func (t *Task) Start(parentCtx context.Context) error {
 	t.Status = TaskRunning
 	t.StartTime = time.Now()
 
-	cmd := exec.CommandContext(ctx, t.Command, t.Args...)
-	cmd.Dir = t.Dir
-	// Set process group so killing terminates child processes (e.g. npm, docker, maven)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd := buildExecCmd(ctx, t.Command, t.Args, t.Dir)
 	t.cmd = cmd
 	t.mu.Unlock()
 
@@ -210,7 +206,7 @@ func (t *Task) Cancel() {
 
 	if t.cmd != nil && t.cmd.Process != nil && t.Status == TaskRunning {
 		// Kill entire process group
-		_ = syscall.Kill(-t.cmd.Process.Pid, syscall.SIGKILL)
+		killProcessGroup(t.cmd)
 	}
 	if t.cancel != nil {
 		t.cancel()

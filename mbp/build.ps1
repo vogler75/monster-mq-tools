@@ -48,11 +48,11 @@ if ($Help) {
     exit 0
 }
 
-$Version = "1.0.0"
-if (Test-Path "../version.txt") {
-    $Version = (Get-Content "../version.txt" -TotalCount 1).Trim()
-} elseif (Test-Path "version.txt") {
+$Version = "0.1.0"
+if (Test-Path "version.txt") {
     $Version = (Get-Content "version.txt" -TotalCount 1).Trim()
+} elseif (Test-Path "../version.txt") {
+    $Version = (Get-Content "../version.txt" -TotalCount 1).Trim()
 }
 
 $ldflags = "-s -w -X main.Version=$Version"
@@ -91,7 +91,7 @@ $nativeOut = "bin/mbp$binaryExt"
 if ($buildNative) {
     Write-Host "Building native mbp binary (version $Version)..." -ForegroundColor Green
     $env:CGO_ENABLED = "0"
-    & go build $goflags "-ldflags=$ldflags" -o $nativeOut .
+    & go build $goflags "-ldflags=$ldflags" -o $nativeOut ./cmd/mbp
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Native build failed with exit code $LASTEXITCODE"
         exit $LASTEXITCODE
@@ -107,33 +107,33 @@ if ($buildAll) {
 
     # Linux AMD64
     $env:GOOS = "linux"; $env:GOARCH = "amd64"; Remove-Item env:GOARM -ErrorAction SilentlyContinue
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-amd64" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-amd64" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # Linux ARM64
     $env:GOOS = "linux"; $env:GOARCH = "arm64"; Remove-Item env:GOARM -ErrorAction SilentlyContinue
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-arm64" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-arm64" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # Linux ARMv7
     $env:GOOS = "linux"; $env:GOARCH = "arm"; $env:GOARM = "7"
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-armv7" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-linux-armv7" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # macOS AMD64 (Darwin)
     Remove-Item env:GOARM -ErrorAction SilentlyContinue
     $env:GOOS = "darwin"; $env:GOARCH = "amd64"
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-darwin-amd64" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-darwin-amd64" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # macOS ARM64 (Darwin / Apple Silicon)
     $env:GOOS = "darwin"; $env:GOARCH = "arm64"
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-darwin-arm64" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-darwin-arm64" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # Windows AMD64
     $env:GOOS = "windows"; $env:GOARCH = "amd64"
-    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-windows-amd64.exe" .
+    & go build $goflags "-ldflags=$ldflags" -o "bin/mbp-windows-amd64.exe" ./cmd/mbp
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     Remove-Item env:GOOS -ErrorAction SilentlyContinue

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // FindMonsterRoot attempts to resolve the monster root directory (containing main, edge, etc.).
@@ -61,6 +62,18 @@ func dirExists(path string) bool {
 
 // GetStandardRegistry returns the list of predefined MonsterMQ components configured for rootDir.
 func GetStandardRegistry(rootDir string) []*Component {
+	isWin := runtime.GOOS == "windows"
+	mainBuild := "./build.sh"
+	edgeBuild := "./build.sh"
+	dashBuild := "./build.sh"
+	toolsBuild := "./build.sh"
+	if isWin {
+		mainBuild = "./build.ps1"
+		edgeBuild = "./build.ps1"
+		dashBuild = "./build.ps1"
+		toolsBuild = "./build.ps1"
+	}
+
 	components := []*Component{
 		{
 			ID:          "main",
@@ -74,7 +87,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All (Container)",
 				Description: "Build standalone Java broker zip in container, cross-platform setup binaries, and docker image",
-				Command:     "./build.sh",
+				Command:     mainBuild,
 				Args:        []string{"--all", "-c"},
 			},
 			BuildTargets: []Target{
@@ -82,42 +95,42 @@ func GetStandardRegistry(rootDir string) []*Component {
 					ID:          "build-all",
 					Name:        "All Artifacts (Container)",
 					Description: "Build broker zip in container, setup executables, and docker image",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--all", "-c"},
 				},
 				{
 					ID:          "build-broker",
 					Name:        "Broker Zip Only (Container)",
 					Description: "Build standalone Java broker bundle in container (zip)",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--broker", "-c"},
 				},
 				{
 					ID:          "build-setup",
 					Name:        "Setup Executables Only",
 					Description: "Build cross-platform Go setup binaries (setup.exe, setup-mac, etc.)",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--setup"},
 				},
 				{
 					ID:          "build-docker",
 					Name:        "Docker Image Only",
 					Description: "Build local Docker image for host platform",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--docker"},
 				},
 				{
 					ID:          "build-all-local",
 					Name:        "All Artifacts (Host/Local)",
 					Description: "Build broker zip on host without Docker container",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--all"},
 				},
 				{
 					ID:          "build-broker-local",
 					Name:        "Broker Zip Only (Host/Local)",
 					Description: "Build standalone Java broker bundle on host without Docker container",
-					Command:     "./build.sh",
+					Command:     mainBuild,
 					Args:        []string{"--broker"},
 				},
 			},
@@ -125,7 +138,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean output build directories",
-				Command:     "./build.sh",
+				Command:     mainBuild,
 				Args:        []string{"--clean"},
 			},
 			DevVersionTarget: &Target{
@@ -190,7 +203,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All",
 				Description: "Build native Go binary, Debian packages, and Docker image",
-				Command:     "./build.sh",
+				Command:     edgeBuild,
 				Args:        []string{"--all"},
 			},
 			BuildTargets: []Target{
@@ -198,28 +211,28 @@ func GetStandardRegistry(rootDir string) []*Component {
 					ID:          "build-all",
 					Name:        "All Artifacts",
 					Description: "Build binary, Debian packages, and Docker image",
-					Command:     "./build.sh",
+					Command:     edgeBuild,
 					Args:        []string{"--all"},
 				},
 				{
 					ID:          "build-binary",
 					Name:        "Native Binary Only",
 					Description: "Build native Go binary for current machine",
-					Command:     "./build.sh",
+					Command:     edgeBuild,
 					Args:        []string{"--binary"},
 				},
 				{
 					ID:          "build-deb",
 					Name:        "Debian Packages Only",
 					Description: "Build Debian packages for all architectures (arm64, armhf, amd64)",
-					Command:     "./build.sh",
+					Command:     edgeBuild,
 					Args:        []string{"--deb"},
 				},
 				{
 					ID:          "build-docker",
 					Name:        "Docker Image Only",
 					Description: "Build local Docker image for host platform",
-					Command:     "./build.sh",
+					Command:     edgeBuild,
 					Args:        []string{"--docker"},
 				},
 			},
@@ -227,7 +240,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean build output directories",
-				Command:     "./build.sh",
+				Command:     edgeBuild,
 				Args:        []string{"--clean"},
 			},
 			DevVersionTarget: &Target{
@@ -268,8 +281,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				},
 			},
 			ArtifactGlobs: []string{
-				"bin/monstermq-edge",
-				"bin/monstermq-edge-linux-*",
+				"bin/monstermq-edge*",
 				"bin/*.deb",
 			},
 		},
@@ -286,7 +298,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All",
 				Description: "Build web bundle and all desktop packages",
-				Command:     "./build.sh",
+				Command:     dashBuild,
 				Args:        []string{"--all"},
 			},
 			BuildTargets: []Target{
@@ -294,35 +306,35 @@ func GetStandardRegistry(rootDir string) []*Component {
 					ID:          "build-all",
 					Name:        "All Packages (Web + Desktop)",
 					Description: "Build web bundle and all desktop packages",
-					Command:     "./build.sh",
+					Command:     dashBuild,
 					Args:        []string{"--all"},
 				},
 				{
 					ID:          "build-web",
 					Name:        "Web Bundle Only",
 					Description: "Build web dashboard assets (dist/)",
-					Command:     "./build.sh",
+					Command:     dashBuild,
 					Args:        []string{"--web"},
 				},
 				{
 					ID:          "build-desktop",
 					Name:        "Desktop Apps Only",
 					Description: "Build macOS DMG & Windows NSIS setup",
-					Command:     "./build.sh",
+					Command:     dashBuild,
 					Args:        []string{"--desktop"},
 				},
 				{
 					ID:          "build-mac",
 					Name:        "macOS DMG Only",
 					Description: "Build macOS desktop DMG app only",
-					Command:     "./build.sh",
+					Command:     dashBuild,
 					Args:        []string{"--mac"},
 				},
 				{
 					ID:          "build-win",
 					Name:        "Windows Setup Only",
 					Description: "Build Windows desktop NSIS setup only",
-					Command:     "./build.sh",
+					Command:     dashBuild,
 					Args:        []string{"--win"},
 				},
 			},
@@ -330,7 +342,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean dist/ and dist-desktop/ directories",
-				Command:     "./build.sh",
+				Command:     dashBuild,
 				Args:        []string{"--clean"},
 			},
 			DevVersionTarget: &Target{
@@ -386,50 +398,8 @@ func GetStandardRegistry(rootDir string) []*Component {
 				"package.json",
 				"version.txt",
 			},
-			DefaultBuild: Target{
-				ID:          "build-all",
-				Name:        "Build All Platforms",
-				Description: "Build macOS and Windows Electron app packages",
-				Command:     "./build.sh",
-				Args:        []string{},
-			},
-			BuildTargets: []Target{
-				{
-					ID:          "build-all",
-					Name:        "All Platforms",
-					Description: "Build macOS and Windows Electron app packages",
-					Command:     "./build.sh",
-					Args:        []string{},
-				},
-				{
-					ID:          "build-mac",
-					Name:        "macOS App Only",
-					Description: "Build macOS Electron DMG packages",
-					Command:     "./build-mac.sh",
-					Args:        []string{},
-				},
-				{
-					ID:          "build-win",
-					Name:        "Windows Setup Only",
-					Description: "Build Windows Electron EXE installer",
-					Command:     "./build-win.sh",
-					Args:        []string{},
-				},
-				{
-					ID:          "build-pwa",
-					Name:        "PWA Web Bundle",
-					Description: "Build production PWA bundle (dist/)",
-					Command:     "./build-pwa.sh",
-					Args:        []string{},
-				},
-				{
-					ID:          "build-docker",
-					Name:        "Docker Image",
-					Description: "Build Explorer web docker container",
-					Command:     "./build-docker.sh",
-					Args:        []string{},
-				},
-			},
+			DefaultBuild: defaultExplorerBuild(isWin),
+			BuildTargets: explorerBuildTargets(isWin),
 			DevVersionTarget: &Target{
 				ID:          "bump-dev",
 				Name:        "Prepare Dev Version",
@@ -437,22 +407,8 @@ func GetStandardRegistry(rootDir string) []*Component {
 				Command:     "./bump-dev.sh",
 				Args:        []string{},
 			},
-			DefaultPublish: Target{
-				ID:          "publish",
-				Name:        "Publish GitHub Release",
-				Description: "Upload release artifacts in release/ to GitHub Release via gh CLI",
-				Command:     "./publish.sh",
-				Args:        []string{},
-			},
-			PublishTargets: []Target{
-				{
-					ID:          "publish",
-					Name:        "Publish GitHub Release",
-					Description: "Upload release artifacts to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{},
-				},
-			},
+			DefaultPublish: defaultExplorerPublish(isWin),
+			PublishTargets: explorerPublishTargets(isWin),
 			ArtifactGlobs: []string{
 				"release/*.dmg",
 				"release/*.exe",
@@ -473,7 +429,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-native",
 				Name:        "Build Native Tools",
 				Description: "Build native binaries for all tools (mmq, i3x, gql, mbp)",
-				Command:     "./build.sh",
+				Command:     toolsBuild,
 				Args:        []string{"--native"},
 			},
 			BuildTargets: []Target{
@@ -481,35 +437,35 @@ func GetStandardRegistry(rootDir string) []*Component {
 					ID:          "build-native",
 					Name:        "Build Native Tools",
 					Description: "Build native binaries for all tools (mmq, i3x, gql, mbp)",
-					Command:     "./build.sh",
+					Command:     toolsBuild,
 					Args:        []string{"--native"},
 				},
 				{
 					ID:          "build-all",
 					Name:        "Cross-compile All Tools",
 					Description: "Cross-compile all tools for linux, darwin, and windows",
-					Command:     "./build.sh",
+					Command:     toolsBuild,
 					Args:        []string{"--all"},
 				},
 				{
 					ID:          "build-cli",
 					Name:        "Build mmq CLI Only",
 					Description: "Build MonsterMQ CLI native binary only",
-					Command:     "./build.sh",
+					Command:     toolsBuild,
 					Args:        []string{"--cli"},
 				},
 				{
 					ID:          "build-i3x",
 					Name:        "Build i3x CLI Only",
 					Description: "Build i3x CLI native binary only",
-					Command:     "./build.sh",
+					Command:     toolsBuild,
 					Args:        []string{"--i3x"},
 				},
 				{
 					ID:          "build-mbp",
 					Name:        "Build mbp Pipeline Only",
 					Description: "Build mbp pipeline binary only",
-					Command:     "./build.sh",
+					Command:     toolsBuild,
 					Args:        []string{"--mbp"},
 				},
 			},
@@ -517,7 +473,7 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "clean",
 				Name:        "Clean Tools",
 				Description: "Clean all tools bin/ directories",
-				Command:     "./build.sh",
+				Command:     toolsBuild,
 				Args:        []string{"--clean"},
 			},
 			DefaultPublish: Target{
@@ -553,6 +509,132 @@ func GetStandardRegistry(rootDir string) []*Component {
 	}
 
 	return components
+}
+
+func defaultExplorerBuild(isWin bool) Target {
+	if isWin {
+		return Target{
+			ID:          "build-win",
+			Name:        "Windows Setup Only",
+			Description: "Build Windows Electron EXE installer",
+			Command:     "./build-win.ps1",
+			Args:        []string{"-b"},
+		}
+	}
+	return Target{
+		ID:          "build-all",
+		Name:        "Build All Platforms",
+		Description: "Build macOS and Windows Electron app packages",
+		Command:     "./build.sh",
+		Args:        []string{},
+	}
+}
+
+func explorerBuildTargets(isWin bool) []Target {
+	if isWin {
+		return []Target{
+			{
+				ID:          "build-win",
+				Name:        "Windows Setup Only",
+				Description: "Build Windows Electron EXE installer",
+				Command:     "./build-win.ps1",
+				Args:        []string{"-b"},
+			},
+			{
+				ID:          "build-pwa",
+				Name:        "PWA Web Bundle",
+				Description: "Build production PWA bundle (dist/)",
+				Command:     "./build-pwa.ps1",
+				Args:        []string{},
+			},
+			{
+				ID:          "build-docker",
+				Name:        "Docker Image",
+				Description: "Build Explorer web docker container",
+				Command:     "./build-docker.sh",
+				Args:        []string{},
+			},
+		}
+	}
+	return []Target{
+		{
+			ID:          "build-all",
+			Name:        "All Platforms",
+			Description: "Build macOS and Windows Electron app packages",
+			Command:     "./build.sh",
+			Args:        []string{},
+		},
+		{
+			ID:          "build-mac",
+			Name:        "macOS App Only",
+			Description: "Build macOS Electron DMG packages",
+			Command:     "./build-mac.sh",
+			Args:        []string{},
+		},
+		{
+			ID:          "build-win",
+			Name:        "Windows Setup Only",
+			Description: "Build Windows Electron EXE installer",
+			Command:     "./build-win.sh",
+			Args:        []string{},
+		},
+		{
+			ID:          "build-pwa",
+			Name:        "PWA Web Bundle",
+			Description: "Build production PWA bundle (dist/)",
+			Command:     "./build-pwa.sh",
+			Args:        []string{},
+		},
+		{
+			ID:          "build-docker",
+			Name:        "Docker Image",
+			Description: "Build Explorer web docker container",
+			Command:     "./build-docker.sh",
+			Args:        []string{},
+		},
+	}
+}
+
+func defaultExplorerPublish(isWin bool) Target {
+	if isWin {
+		return Target{
+			ID:          "publish",
+			Name:        "Publish Windows Setup to GitHub",
+			Description: "Upload Windows release artifacts in release/ to GitHub Release via gh CLI",
+			Command:     "./build-win.ps1",
+			Args:        []string{"-u"},
+		}
+	}
+	return Target{
+		ID:          "publish",
+		Name:        "Publish GitHub Release",
+		Description: "Upload release artifacts in release/ to GitHub Release via gh CLI",
+		Command:     "./publish.sh",
+		Args:        []string{},
+	}
+}
+
+func explorerPublishTargets(isWin bool) []Target {
+	if isWin {
+		return []Target{
+			{
+				ID:          "publish",
+				Name:        "Publish Windows Setup to GitHub",
+				Description: "Upload Windows release artifacts to GitHub Release",
+				Command:     "./build-win.ps1",
+				Args:        []string{"-u"},
+			},
+		}
+	}
+	return []Target{
+		{
+			ID:          "publish",
+			Name:        "Publish GitHub Release",
+			Description: "Upload release artifacts to GitHub Release",
+			Command:     "./publish.sh",
+			Args:        []string{},
+		},
+	}
 }
 
 // LoadAndRefreshAll discovers and loads all components with up-to-date statuses.

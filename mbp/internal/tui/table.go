@@ -26,8 +26,8 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 	// Total fixed = 2 + 12 + 1 + 15 + 1 + 18 + 1 + 14 + 1 = 65
 	fixedWidth := 65
 	artWidth := availWidth - fixedWidth
-	if artWidth < 10 {
-		artWidth = 10
+	if artWidth < 0 {
+		artWidth = 0
 	}
 
 	// Table Header
@@ -79,21 +79,27 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 		// 5. Build Status string
 		buildCol := renderBuildStatus(c, 14)
 
-		// 6. Artifact info
-		artCol := renderArtifactInfo(c, artWidth)
-
-		rowText := fmt.Sprintf("%s%s %s %s %s %s", prefix, compCol, versionCol, gitCol, buildCol, artCol)
+		var rowText string
+		if artWidth > 0 {
+			// 6. Artifact info
+			artCol := renderArtifactInfo(c, artWidth)
+			rowText = fmt.Sprintf("%s%s %s %s %s %s", prefix, compCol, versionCol, gitCol, buildCol, artCol)
+		} else {
+			rowText = fmt.Sprintf("%s%s %s %s %s", prefix, compCol, versionCol, gitCol, buildCol)
+		}
 
 		// Ensure row visible width is padded to exactly availWidth
 		rowVis := lipgloss.Width(rowText)
 		if rowVis < availWidth {
 			rowText += strings.Repeat(" ", availWidth-rowVis)
+		} else if rowVis > availWidth {
+			rowText = truncateVisible(rowText, availWidth)
 		}
 
 		if isSel {
 			sb.WriteString(StyleSelectedRow.Width(availWidth).Render(rowText))
 		} else {
-			sb.WriteString(StyleNormalRow.Render(rowText))
+			sb.WriteString(StyleNormalRow.Width(availWidth).Render(rowText))
 		}
 		if i < len(comps)-1 {
 			sb.WriteString("\n")

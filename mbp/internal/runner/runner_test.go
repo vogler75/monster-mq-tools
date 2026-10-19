@@ -2,12 +2,22 @@ package runner
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestTaskExecution(t *testing.T) {
-	task := NewTask("test", "build", "echo-test", "echo", []string{"hello", "monster"}, ".")
+	cmd := "echo"
+	args := []string{"hello", "monster"}
+	if runtime.GOOS == "windows" {
+		cmd = "cmd"
+		args = []string{"/c", "echo hello monster"}
+	}
+	task := NewTask("test", "build", "echo-test", cmd, args, ".")
 	ctx := context.Background()
 
 	err := task.Start(ctx)
@@ -30,7 +40,13 @@ func TestTaskExecution(t *testing.T) {
 }
 
 func TestTaskCancellation(t *testing.T) {
-	task := NewTask("test", "build", "sleep-test", "sleep", []string{"5"}, ".")
+	cmd := "sleep"
+	args := []string{"5"}
+	if runtime.GOOS == "windows" {
+		cmd = "ping"
+		args = []string{"127.0.0.1", "-n", "10"}
+	}
+	task := NewTask("test", "build", "sleep-test", cmd, args, ".")
 	ctx := context.Background()
 
 	err := task.Start(ctx)
@@ -45,5 +61,44 @@ func TestTaskCancellation(t *testing.T) {
 
 	if task.Status != TaskCancelled && task.Status != TaskFailed {
 		t.Errorf("expected task to be cancelled or failed, got %s", task.Status)
+	}
+}
+
+func TestPowerShellScriptExecution(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("skipping Windows-specific PowerShell test")
+	}
+
+	tmpDir := t.TempDir()
+	scriptFile := filepath.Join(tmpDir, "test-script.ps1")
+	scriptContent := "param([string]$name)\nWrite-Output \"Hello $name from PowerShell\"\nexit 0\n"
+	if err := os.WriteFile(scriptFile, []byte(scriptContent), 0644); err != nil {
+		t.Fatalf("failed to write test script: %v", err)
+	}
+
+	task := NewTask("test", "build", "ps-test", "./test-script.ps1", []string{"Monster"}, tmpDir)
+	ctx := context.Background()
+
+	err := task.Start(ctx)
+	if err != nil {
+		t.Fatalf("failed to start task: %v", err)
+	}
+
+	<-task.DoneChan()
+
+	if task.Status != TaskSuccess {
+		t.Errorf("expected status %s, got %s (error: %s)", TaskSuccess, task.Status, task.Error)
+	}
+
+	lines := task.GetLines()
+	found := false
+	for _, l := range lines {
+		if strings.Contains(l.Text, "Hello Monster from PowerShell") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected line containing 'Hello Monster from PowerShell', got lines: %+v", lines)
 	}
 }
