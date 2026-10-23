@@ -64,8 +64,21 @@ func TestAppModelPerComponentLogPreservation(t *testing.T) {
 	}
 	m.ComponentTasks["edge"] = taskEdge
 
+	mainIdx := -1
+	edgeIdx := -1
+	for idx, c := range m.Components {
+		if c.ID == "main" {
+			mainIdx = idx
+		} else if c.ID == "edge" {
+			edgeIdx = idx
+		}
+	}
+	if mainIdx == -1 || edgeIdx == -1 {
+		t.Fatalf("Could not find main or edge component in model")
+	}
+
 	// Select main
-	m.SelectedIdx = 0
+	m.SelectedIdx = mainIdx
 	m.updateLogViewerForSelection()
 	if m.LogViewer.Task != taskMain {
 		t.Errorf("Expected main task attached, got %v", m.LogViewer.Task)
@@ -78,7 +91,7 @@ func TestAppModelPerComponentLogPreservation(t *testing.T) {
 	m.saveCurrentLogState()
 
 	// Switch to edge
-	m.SelectedIdx = 1
+	m.SelectedIdx = edgeIdx
 	m.Focus = FocusMenu
 	m.updateLogViewerForSelection()
 	if m.LogViewer.Task != taskEdge {
@@ -86,7 +99,7 @@ func TestAppModelPerComponentLogPreservation(t *testing.T) {
 	}
 
 	// Switch back to main - scroll position must be preserved!
-	m.SelectedIdx = 0
+	m.SelectedIdx = mainIdx
 	m.updateLogViewerForSelection()
 	if m.LogViewer.Viewport.YOffset != 5 {
 		t.Errorf("Expected preserved YOffset 5 for main, got %d", m.LogViewer.Viewport.YOffset)
@@ -281,5 +294,69 @@ func TestToolsPublishDialog(t *testing.T) {
 
 	if m.Dialog.Component.ID != "tools" {
 		t.Errorf("Expected Dialog.Component.ID to be 'tools', got %s", m.Dialog.Component.ID)
+	}
+}
+
+func TestBuildAllAndPublishAllQueueOrder(t *testing.T) {
+	m, err := NewAppModel("/home/vogler/Workspace/monster")
+	if err != nil {
+		t.Fatalf("Failed to create model: %v", err)
+	}
+
+	// 1. Verify triggerBuildAll queues dashboard first, then main, edge, and excludes explorer & tools
+	m.triggerBuildAll()
+
+	// The first task is started immediately, remainder are in m.Queue
+	if m.ActiveTask == nil {
+		t.Fatalf("ActiveTask should be running after triggerBuildAll")
+	}
+	if m.ActiveTask.ComponentID != "dashboard" {
+		t.Errorf("First component to build MUST be dashboard, got %s", m.ActiveTask.ComponentID)
+	}
+
+	expectedRemainder := []string{"main", "edge"}
+	if len(m.Queue) != len(expectedRemainder) {
+		t.Fatalf("Expected %d remaining queued tasks, got %d", len(expectedRemainder), len(m.Queue))
+	}
+	for i, exp := range expectedRemainder {
+		if m.Queue[i].ComponentID != exp {
+			t.Errorf("Queue[%d] expected %s, got %s", i, exp, m.Queue[i].ComponentID)
+		}
+	}
+
+	// Ensure neither explorer nor tools are queued
+	for _, q := range m.Queue {
+		if q.ComponentID == "explorer" || q.ComponentID == "tools" {
+			t.Errorf("Component %s should NOT be in Build All queue", q.ComponentID)
+		}
+	}
+
+	// Reset active task
+	m.ActiveTask = nil
+	m.Queue = nil
+
+	// 2. Verify triggerPublishAll queues dashboard first, then main, edge, and excludes explorer & tools
+	m.triggerPublishAll()
+
+	if m.ActiveTask == nil {
+		t.Fatalf("ActiveTask should be running after triggerPublishAll")
+	}
+	if m.ActiveTask.ComponentID != "dashboard" {
+		t.Errorf("First component to publish MUST be dashboard, got %s", m.ActiveTask.ComponentID)
+	}
+
+	if len(m.Queue) != len(expectedRemainder) {
+		t.Fatalf("Expected %d remaining queued publish tasks, got %d", len(expectedRemainder), len(m.Queue))
+	}
+	for i, exp := range expectedRemainder {
+		if m.Queue[i].ComponentID != exp {
+			t.Errorf("Publish Queue[%d] expected %s, got %s", i, exp, m.Queue[i].ComponentID)
+		}
+	}
+
+	for _, q := range m.Queue {
+		if q.ComponentID == "explorer" || q.ComponentID == "tools" {
+			t.Errorf("Component %s should NOT be in Publish All queue", q.ComponentID)
+		}
 	}
 }

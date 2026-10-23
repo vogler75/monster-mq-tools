@@ -58,10 +58,11 @@ Launch the interactive dashboard:
 | `Tab` | Toggle active focus between Component Menu and Live Log Viewer |
 | `PgUp` / `PgDn` | Scroll log viewer pages up / down |
 | `b` | Open build target selector dialog for selected component |
-| `B` | Start batch **Build All** sequentially |
+| `B` | Start batch **Build All** sequentially (`dashboard` first, then `main`, `edge`) |
 | `u` | Run `git pull` for selected component (streams live logs to viewer) |
 | `U` | Run batch **Pull All** components sequentially |
 | `p` | Open publish confirmation dialog for selected component |
+| `P` | Open batch **Publish All** dialog (`dashboard`, `main`, `edge`) |
 | `c` | Clean build outputs for selected component |
 | `g` | Run `git fetch` across all repositories in background & refresh statuses |
 | `r` | Refresh component & artifact statuses immediately |
@@ -110,7 +111,8 @@ Launch the interactive dashboard:
 ./bin/mbp build main --target build-docker
 ./bin/mbp build dashboard --target build-mac
 
-# Build all components sequentially
+# Build core components sequentially (dashboard is built first, then main, edge)
+# Note: explorer and tools are handled separately and not included in 'build all'
 ./bin/mbp build all
 ```
 
@@ -125,6 +127,9 @@ Launch the interactive dashboard:
 ./bin/mbp publish edge --target publish-all -y
 ./bin/mbp publish tools -y
 ./bin/mbp publish tools --target publish-build-all -y
+
+# Publish all core components sequentially (dashboard, main, edge)
+./bin/mbp publish all -y
 ```
 
 ### Clean Artifacts
@@ -135,6 +140,21 @@ Launch the interactive dashboard:
 
 # Clean all components
 ./bin/mbp clean all
+```
+
+### Advance to Next Dev Version (`release.sh --dev`)
+
+```bash
+# Advance specific component to next dev version
+./bin/mbp dev main
+./bin/mbp dev edge
+./bin/mbp dev dashboard
+
+# Advance specific component with an explicit dev version
+./bin/mbp dev main --version 1.8.37-dev
+
+# Advance all core components sequentially (dashboard, main, edge)
+./bin/mbp dev all
 ```
 
 ---

@@ -76,5 +76,44 @@ func TestComponentTargets(t *testing.T) {
 		if len(c.PublishTargets) == 0 {
 			t.Errorf("component %s has no PublishTargets", c.ID)
 		}
+		if c.DevVersionTarget != nil {
+			if c.DevVersionTarget.Command != "./release.sh" {
+				t.Errorf("component %s DevVersionTarget.Command expected './release.sh', got '%s'", c.ID, c.DevVersionTarget.Command)
+			}
+			if len(c.DevVersionTarget.Args) == 0 || c.DevVersionTarget.Args[0] != "--dev" {
+				t.Errorf("component %s DevVersionTarget.Args expected to start with '--dev', got %v", c.ID, c.DevVersionTarget.Args)
+			}
+		}
+	}
+}
+
+func TestComponentOrderAndSeparation(t *testing.T) {
+	root, err := FindMonsterRoot("")
+	if err != nil {
+		t.Fatalf("failed to find monster root: %v", err)
+	}
+
+	comps := GetStandardRegistry(root)
+	if len(comps) == 0 {
+		t.Fatalf("no components returned")
+	}
+
+	// 1. Dashboard must be on first position
+	if comps[0].ID != "dashboard" {
+		t.Errorf("expected dashboard at first position (index 0), got %s", comps[0].ID)
+	}
+
+	// 2. Explorer and Tools must be separate (excluded from build-all and publish-all)
+	for _, c := range comps {
+		switch c.ID {
+		case "explorer", "tools":
+			if !c.IsSeparate() {
+				t.Errorf("expected component %s to have IsSeparate() == true", c.ID)
+			}
+		case "dashboard", "main", "edge":
+			if c.IsSeparate() {
+				t.Errorf("expected core component %s to have IsSeparate() == false", c.ID)
+			}
+		}
 	}
 }

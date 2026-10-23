@@ -263,6 +263,14 @@ func (lv *LogViewer) renderComponentSummary(c *component.Component) string {
 			c.DefaultPublish.Name,
 		))
 	}
+	if c.DevVersionTarget != nil {
+		sb.WriteString(fmt.Sprintf("    %s %s (%s %s)\n",
+			StyleKey.Render("[v/d] Dev:"),
+			c.DevVersionTarget.Name,
+			c.DevVersionTarget.Command,
+			strings.Join(c.DevVersionTarget.Args, " "),
+		))
+	}
 	if c.CleanTarget != nil {
 		sb.WriteString(fmt.Sprintf("    %s %s\n",
 			StyleKey.Render("[c] Clean:"),

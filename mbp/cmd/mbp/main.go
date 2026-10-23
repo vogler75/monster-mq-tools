@@ -61,18 +61,18 @@ USAGE:
   mbp status [flags]             Print status table of all components to stdout
   mbp build <comp|all> [flags]   Build a component or all components headlessly
   mbp pull <comp|all> [flags]    Pull latest git updates for component or all
-  mbp publish <comp> [flags]     Publish release assets headlessly
-  mbp dev <comp|all> [flags]     Advance component(s) to next dev version (bump-dev)
+  mbp publish <comp|all> [flags] Publish release assets headlessly
+  mbp dev <comp|all> [flags]     Advance component(s) to next dev version (release.sh --dev)
   mbp clean <comp|all> [flags]   Clean build artifacts
   mbp version                    Display version
 
 COMPONENTS:
+  dashboard   MonsterMQ Dashboard (built first)
   main        MonsterMQ Core
   edge        MonsterMQ Edge Broker
-  dashboard   MonsterMQ Dashboard
-  explorer    MonsterMQ Explorer
-  tools       MonsterMQ Tools (cli/mmq, i3x)
-  all         All components sequentially
+  explorer    MonsterMQ Explorer (handled separately)
+  tools       MonsterMQ Tools (cli/mmq, i3x - handled separately)
+  all         All core components sequentially (dashboard, main, edge)
 
 FLAGS:
   --root <path>    Override path to monster repositories directory (default: parent dir)
@@ -136,7 +136,10 @@ func runStatusCmd(args []string) {
 	fmt.Printf("%-12s %-16s %-24s %-14s %s\n", "COMPONENT", "VERSION", "GIT STATUS", "BUILD STATUS", "ARTIFACT")
 	fmt.Println(strings.Repeat("─", 86))
 
-	for _, c := range comps {
+	for i, c := range comps {
+		if i > 0 && (comps[i-1].ID == "dashboard" || c.ID == "explorer") {
+			fmt.Println(strings.Repeat("─", 86))
+		}
 		gitStr := "no git"
 		if c.Git.IsRepo {
 			parts := []string{c.Git.Branch}
@@ -217,7 +220,7 @@ func runBuildCmd(args []string) {
 
 	if targetComp == "all" {
 		for _, c := range comps {
-			if c.ID == "tools" {
+			if c.IsSeparate() {
 				continue
 			}
 			fmt.Printf("\n=== Building %s (%s) ===\n", c.Name, c.ID)
@@ -226,7 +229,7 @@ func runBuildCmd(args []string) {
 				os.Exit(1)
 			}
 		}
-		fmt.Println("\n✔ All components built successfully!")
+		fmt.Println("\n✔ All core components built successfully!")
 		return
 	}
 
@@ -339,7 +342,7 @@ func runPublishCmd(args []string) {
 	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (main, edge, dashboard, explorer, tools)\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (dashboard, main, edge, explorer, tools) or 'all'\n")
 		os.Exit(1)
 	}
 
@@ -354,6 +357,57 @@ func runPublishCmd(args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if targetComp == "all" {
+		var toPublish []*component.Component
+		for _, c := range comps {
+			if c.IsSeparate() {
+				continue
+			}
+			if c.DefaultPublish.Command != "" {
+				toPublish = append(toPublish, c)
+			}
+		}
+
+		if len(toPublish) == 0 {
+			fmt.Println("No core components configured for publishing.")
+			return
+		}
+
+		if !*yesFlag {
+			fmt.Println("The following core components will be published sequentially:")
+			for _, c := range toPublish {
+				fmt.Printf("  • %s (%s v%s)\n", c.Name, c.ID, c.Version)
+			}
+			fmt.Println("(explorer and tools are handled separately and excluded)")
+			fmt.Print("\nAre you sure you want to publish all these components? [y/N]: ")
+			var response string
+			_, _ = fmt.Scanln(&response)
+			if strings.ToLower(strings.TrimSpace(response)) != "y" {
+				fmt.Println("Publishing aborted.")
+				return
+			}
+		}
+
+		for _, c := range toPublish {
+			fmt.Printf("\n=== Publishing %s (%s) ===\n", c.Name, c.ID)
+			target := c.DefaultPublish
+			if *targetFlag != "" {
+				for _, t := range c.PublishTargets {
+					if t.ID == *targetFlag {
+						target = t
+						break
+					}
+				}
+			}
+			if err := executeTaskCLI(c.ID, "publish", target, c.Directory); err != nil {
+				fmt.Fprintf(os.Stderr, "Publish failed for %s: %v\n", c.ID, err)
+				os.Exit(1)
+			}
+		}
+		fmt.Println("\n✔ All core components published successfully!")
+		return
 	}
 
 	comp, err := component.FindComponent(comps, targetComp)
@@ -484,6 +538,9 @@ func runDevVersionCmd(args []string) {
 
 	if targetComp == "all" {
 		for _, c := range comps {
+			if c.IsSeparate() {
+				continue
+			}
 			if c.DevVersionTarget != nil {
 				fmt.Printf("\n=== Advancing %s (%s) ===\n", c.Name, c.ID)
 				t := buildTargetWithArgs(c.DevVersionTarget)
@@ -492,7 +549,7 @@ func runDevVersionCmd(args []string) {
 				}
 			}
 		}
-		fmt.Println("\n✔ Dev version preparation complete for all supported components.")
+		fmt.Println("\n✔ Dev version preparation complete for all core components.")
 		return
 	}
 

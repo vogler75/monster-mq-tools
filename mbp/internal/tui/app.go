@@ -306,7 +306,7 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case "B":
-		// Build ALL components sequentially
+		// Build ALL core components sequentially
 		return m.triggerBuildAll()
 
 	case "p":
@@ -326,6 +326,30 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			SelectedIdx: 0,
 		}
 
+	case "P":
+		// Publish ALL core components sequentially (dashboard, main, edge)
+		var targets []component.Target
+		for _, c := range m.Components {
+			if !c.IsSeparate() && c.DefaultPublish.Command != "" {
+				targets = append(targets, component.Target{
+					ID:          c.ID,
+					Name:        fmt.Sprintf("%s (%s v%s)", c.Name, c.ID, c.Version),
+					Description: c.DefaultPublish.Description,
+					Command:     c.DefaultPublish.Command,
+					Args:        c.DefaultPublish.Args,
+				})
+			}
+		}
+		if len(targets) == 0 {
+			m.StatusMsg = "No core components configured for Publish All."
+			return nil
+		}
+		m.Dialog = DialogModel{
+			Type:        DialogPublishAllConfirm,
+			Targets:     targets,
+			SelectedIdx: 0,
+		}
+
 	case "v", "d":
 		// Prepare next dev version
 		sel := m.selectedComponent()
@@ -337,6 +361,30 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			Type:        DialogDevVersionConfirm,
 			Component:   sel,
 			Targets:     []component.Target{*sel.DevVersionTarget},
+			SelectedIdx: 0,
+		}
+
+	case "D":
+		// Prepare next dev version for all core components
+		var targets []component.Target
+		for _, c := range m.Components {
+			if !c.IsSeparate() && c.DevVersionTarget != nil {
+				targets = append(targets, component.Target{
+					ID:          c.ID,
+					Name:        fmt.Sprintf("%s (%s v%s)", c.Name, c.ID, c.Version),
+					Description: c.DevVersionTarget.Description,
+					Command:     c.DevVersionTarget.Command,
+					Args:        c.DevVersionTarget.Args,
+				})
+			}
+		}
+		if len(targets) == 0 {
+			m.StatusMsg = "No core components configured for Dev Version."
+			return nil
+		}
+		m.Dialog = DialogModel{
+			Type:        DialogDevVersionAllConfirm,
+			Targets:     targets,
 			SelectedIdx: 0,
 		}
 
@@ -481,6 +529,14 @@ func (m *AppModel) executeDialogAction() tea.Cmd {
 	d := m.Dialog
 	m.Dialog.Type = DialogNone
 
+	if d.Type == DialogPublishAllConfirm {
+		return m.triggerPublishAll()
+	}
+
+	if d.Type == DialogDevVersionAllConfirm {
+		return m.triggerDevVersionAll()
+	}
+
 	if d.Component == nil || len(d.Targets) == 0 {
 		return nil
 	}
@@ -504,6 +560,38 @@ func (m *AppModel) executeDialogAction() tea.Cmd {
 	return nil
 }
 
+func (m *AppModel) triggerDevVersionAll() tea.Cmd {
+	if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
+		m.StatusMsg = "Cannot start Dev Version All: another task is already running!"
+		return nil
+	}
+
+	m.Queue = nil
+	for _, c := range m.Components {
+		if c.IsSeparate() {
+			continue // Handled separately (explorer, tools) - not included in dev all
+		}
+		if c.DevVersionTarget != nil {
+			m.Queue = append(m.Queue, queuedTask{
+				ComponentID: c.ID,
+				Target:      *c.DevVersionTarget,
+				Action:      "dev",
+			})
+		}
+	}
+
+	if len(m.Queue) == 0 {
+		m.StatusMsg = "No core components configured for dev version bump."
+		return nil
+	}
+
+	first := m.Queue[0]
+	m.Queue = m.Queue[1:]
+	m.StatusMsg = fmt.Sprintf("Started Dev Version sequence (%d components queued: %s).",
+		len(m.Queue)+1, first.ComponentID)
+	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
+}
+
 func (m *AppModel) triggerBuildAll() tea.Cmd {
 	if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
 		m.StatusMsg = "Cannot start Build All: another task is already running!"
@@ -512,8 +600,8 @@ func (m *AppModel) triggerBuildAll() tea.Cmd {
 
 	m.Queue = nil
 	for _, c := range m.Components {
-		if c.ID == "tools" {
-			continue // Skip tools in main full build unless selected
+		if c.IsSeparate() {
+			continue // Handled separately (explorer, tools) - not included in build all
 		}
 		m.Queue = append(m.Queue, queuedTask{
 			ComponentID: c.ID,
@@ -529,6 +617,37 @@ func (m *AppModel) triggerBuildAll() tea.Cmd {
 	first := m.Queue[0]
 	m.Queue = m.Queue[1:]
 	m.StatusMsg = fmt.Sprintf("Started Build All sequence (%d components queued).", len(m.Queue)+1)
+	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
+}
+
+func (m *AppModel) triggerPublishAll() tea.Cmd {
+	if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
+		m.StatusMsg = "Cannot start Publish All: another task is already running!"
+		return nil
+	}
+
+	m.Queue = nil
+	for _, c := range m.Components {
+		if c.IsSeparate() {
+			continue // Handled separately (explorer, tools) - not included in publish all
+		}
+		if c.DefaultPublish.Command != "" {
+			m.Queue = append(m.Queue, queuedTask{
+				ComponentID: c.ID,
+				Target:      c.DefaultPublish,
+				Action:      "publish",
+			})
+		}
+	}
+
+	if len(m.Queue) == 0 {
+		m.StatusMsg = "No core components configured for Publish All."
+		return nil
+	}
+
+	first := m.Queue[0]
+	m.Queue = m.Queue[1:]
+	m.StatusMsg = fmt.Sprintf("Started Publish All sequence (%d components queued).", len(m.Queue)+1)
 	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
 }
 
@@ -665,8 +784,14 @@ func (m *AppModel) resizeLayout() {
 
 	tableHeight := 0
 	if !m.FullscreenLog {
-		// Border top (1) + Border bottom (1) + Header (1) + Separator (1) + len(m.Components)
-		tableHeight = 4 + len(m.Components)
+		sepCount := 0
+		for i := 1; i < len(m.Components); i++ {
+			if m.Components[i-1].ID == "dashboard" || m.Components[i].ID == "explorer" {
+				sepCount++
+			}
+		}
+		// Border top (1) + Border bottom (1) + Header (1) + Header Separator (1) + rows + separators
+		tableHeight = 4 + len(m.Components) + sepCount
 	}
 
 	logPaneOverhead := 3 // Border top (1) + Border bottom (1) + Log Title (1)
@@ -815,14 +940,15 @@ func (m *AppModel) renderFooter() string {
 			"[q] Quit",
 		}
 	} else {
-		if m.Width < 105 {
+		if m.Width < 115 {
 			keys = []string{
 				"[↑/↓] Select",
 				"[Tab] Focus Log",
 				"[b] Build",
-				"[u] Pull",
+				"[B] Build All",
 				"[p] Publish",
-				"[v] Dev",
+				"[P] Publish All",
+				"[u] Pull",
 				"[f] Full Log",
 				"[?] Help",
 				"[q] Quit",
@@ -836,6 +962,7 @@ func (m *AppModel) renderFooter() string {
 				"[u] Pull",
 				"[U] Pull All",
 				"[p] Publish",
+				"[P] Publish All",
 				"[v] Dev",
 				"[c] Clean",
 				"[f] Full Log",
