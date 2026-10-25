@@ -67,11 +67,13 @@ func GetStandardRegistry(rootDir string) []*Component {
 	edgeBuild := "./build.sh"
 	dashBuild := "./build.sh"
 	toolsBuild := "./build.sh"
+	testsBuild := "./build.sh"
 	if isWin {
 		mainBuild = "./build.ps1"
 		edgeBuild = "./build.ps1"
 		dashBuild = "./build.ps1"
 		toolsBuild = "./build.ps1"
+		testsBuild = "./build.ps1"
 	}
 
 	components := []*Component{
@@ -506,6 +508,66 @@ func GetStandardRegistry(rootDir string) []*Component {
 				"i3x/bin/i3x*",
 				"mbp/bin/mbp*",
 				"gql/bin/*",
+			},
+		},
+		{
+			ID:          "tests",
+			Name:        "MonsterMQ Tests",
+			Description: "Test programs (mqtt-compliance suite, mq-bench benchmark)",
+			Directory:   filepath.Join(rootDir, "tests"),
+			Separate:    true,
+			VersionFiles: []string{
+				"version.txt",
+			},
+			DefaultBuild: Target{
+				ID:          "build-all",
+				Name:        "Build All Test Programs",
+				Description: "Build mqtt-compliance and mq-bench binaries",
+				Command:     testsBuild,
+				Args:        []string{"--all"},
+			},
+			BuildTargets: []Target{
+				{
+					ID:          "build-all",
+					Name:        "Build All Test Programs",
+					Description: "Build mqtt-compliance and mq-bench binaries",
+					Command:     testsBuild,
+					Args:        []string{"--all"},
+				},
+				{
+					ID:          "build-test",
+					Name:        "Build & Unit Test All",
+					Description: "Build all test programs and run their unit tests",
+					Command:     testsBuild,
+					Args:        []string{"--all", "--test"},
+				},
+				{
+					ID:          "build-compliance",
+					Name:        "Build mqtt-compliance Only",
+					Description: "Build MQTT compliance suite binary only",
+					Command:     testsBuild,
+					Args:        []string{"--compliance"},
+				},
+				{
+					ID:          "build-performance",
+					Name:        "Build mq-bench Only",
+					Description: "Build multi-protocol benchmark binary only",
+					Command:     testsBuild,
+					Args:        []string{"--performance"},
+				},
+			},
+			CleanTarget: &Target{
+				ID:          "clean",
+				Name:        "Clean Test Programs",
+				Description: "Remove mqtt-compliance and mq-bench binaries",
+				Command:     testsBuild,
+				Args:        []string{"--clean"},
+			},
+			ArtifactGlobs: []string{
+				"compliance/mqtt-compliance",
+				"compliance/mqtt-compliance.exe",
+				"performance/mq-bench",
+				"performance/mq-bench.exe",
 			},
 		},
 	}

@@ -70,11 +70,14 @@ func TestComponentTargets(t *testing.T) {
 		if len(c.BuildTargets) == 0 {
 			t.Errorf("component %s has no BuildTargets", c.ID)
 		}
-		if c.DefaultPublish.Command == "" {
-			t.Errorf("component %s has empty DefaultPublish command", c.ID)
-		}
-		if len(c.PublishTargets) == 0 {
-			t.Errorf("component %s has no PublishTargets", c.ID)
+		// tests has nothing to release, so it has no publish targets
+		if c.ID != "tests" {
+			if c.DefaultPublish.Command == "" {
+				t.Errorf("component %s has empty DefaultPublish command", c.ID)
+			}
+			if len(c.PublishTargets) == 0 {
+				t.Errorf("component %s has no PublishTargets", c.ID)
+			}
 		}
 		if c.DevVersionTarget != nil {
 			if c.DevVersionTarget.Command != "./release.sh" {
@@ -103,10 +106,10 @@ func TestComponentOrderAndSeparation(t *testing.T) {
 		t.Errorf("expected dashboard at first position (index 0), got %s", comps[0].ID)
 	}
 
-	// 2. Explorer and Tools must be separate (excluded from build-all and publish-all)
+	// 2. Explorer, Tools and Tests must be separate (excluded from build-all and publish-all)
 	for _, c := range comps {
 		switch c.ID {
-		case "explorer", "tools":
+		case "explorer", "tools", "tests":
 			if !c.IsSeparate() {
 				t.Errorf("expected component %s to have IsSeparate() == true", c.ID)
 			}

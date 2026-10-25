@@ -1,6 +1,6 @@
 # mbp (MonsterMQ Build Pipeline)
 
-`mbp` is the terminal build pipeline, status dashboard, and release orchestrator for the MonsterMQ ecosystem (`main`, `edge`, `dashboard`, `explorer`, and `tools`).
+`mbp` is the terminal build pipeline, status dashboard, and release orchestrator for the MonsterMQ ecosystem (`main`, `edge`, `dashboard`, `explorer`, `tools`, and `tests`).
 
 It provides both an interactive **Terminal User Interface (TUI)** built with Charmbracelet Bubble Tea & Lipgloss and a scriptable **Headless CLI** for CI/CD and automation.
 
@@ -14,6 +14,7 @@ It provides both an interactive **Terminal User Interface (TUI)** built with Cha
   - `dashboard` (Dashboard - Vite bundle, macOS DMG, Windows NSIS setup)
   - `explorer` (Explorer - Electron desktop packages, macOS DMG, Windows setup, docker)
   - `tools` (Tools - `mmq`, `i3x`, and schema utilities)
+  - `tests` (Test programs - `mqtt-compliance` suite and `mq-bench` benchmark)
 - **Real-Time Git Inspection**: Checks current branch, short commit hash, uncommitted/dirty changes, and upstream tracking status (ahead/behind counts indicating if new versions are available on git).
 - **Compilation & Freshness Detection**: Discovers compiled artifacts on disk and compares modification times against the latest source commits to show whether components are `Built`, `Outdated`, or `Missing`.
 - **Target Selection & Single/Batch Builds**: Build individual targets (e.g. Docker only, Debian only, macOS only) or batch build all components in sequence (`[B]`).
@@ -111,8 +112,12 @@ Launch the interactive dashboard:
 ./bin/mbp build main --target build-docker
 ./bin/mbp build dashboard --target build-mac
 
+# Build the test programs (mqtt-compliance, mq-bench), optionally with unit tests
+./bin/mbp build tests
+./bin/mbp build tests --target build-test
+
 # Build core components sequentially (dashboard is built first, then main, edge)
-# Note: explorer and tools are handled separately and not included in 'build all'
+# Note: explorer, tools and tests are handled separately and not included in 'build all'
 ./bin/mbp build all
 ```
 

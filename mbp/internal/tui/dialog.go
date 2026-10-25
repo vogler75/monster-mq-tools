@@ -108,7 +108,7 @@ func RenderModal(d *DialogModel, width, height int) string {
 			content.WriteString(fmt.Sprintf("  • %s\n", lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(t.Name)))
 		}
 		content.WriteString("\n")
-		content.WriteString(StyleDim.Render("(explorer and tools are handled separately and excluded)\n\n"))
+		content.WriteString(StyleDim.Render("(explorer, tools and tests are handled separately and excluded)\n\n"))
 		content.WriteString(StyleDim.Render("[Enter] Confirm & Publish All   [Esc] Cancel"))
 
 	case DialogCleanConfirm:
@@ -134,7 +134,7 @@ func RenderModal(d *DialogModel, width, height int) string {
 			content.WriteString(fmt.Sprintf("  • %s\n", lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(t.Name)))
 		}
 		content.WriteString("\n")
-		content.WriteString(StyleDim.Render("(explorer and tools are handled separately and excluded)\n\n"))
+		content.WriteString(StyleDim.Render("(explorer, tools and tests are handled separately and excluded)\n\n"))
 		content.WriteString(StyleDim.Render("[Enter] Confirm & Advance Dev Versions   [Esc] Cancel"))
 
 	case DialogHelp:

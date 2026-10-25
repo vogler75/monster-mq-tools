@@ -326,7 +326,7 @@ func TestBuildAllAndPublishAllQueueOrder(t *testing.T) {
 
 	// Ensure neither explorer nor tools are queued
 	for _, q := range m.Queue {
-		if q.ComponentID == "explorer" || q.ComponentID == "tools" {
+		if q.ComponentID == "explorer" || q.ComponentID == "tools" || q.ComponentID == "tests" {
 			t.Errorf("Component %s should NOT be in Build All queue", q.ComponentID)
 		}
 	}
@@ -355,7 +355,7 @@ func TestBuildAllAndPublishAllQueueOrder(t *testing.T) {
 	}
 
 	for _, q := range m.Queue {
-		if q.ComponentID == "explorer" || q.ComponentID == "tools" {
+		if q.ComponentID == "explorer" || q.ComponentID == "tools" || q.ComponentID == "tests" {
 			t.Errorf("Component %s should NOT be in Publish All queue", q.ComponentID)
 		}
 	}

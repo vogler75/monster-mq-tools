@@ -569,7 +569,7 @@ func (m *AppModel) triggerDevVersionAll() tea.Cmd {
 	m.Queue = nil
 	for _, c := range m.Components {
 		if c.IsSeparate() {
-			continue // Handled separately (explorer, tools) - not included in dev all
+			continue // Handled separately (explorer, tools, tests) - not included in dev all
 		}
 		if c.DevVersionTarget != nil {
 			m.Queue = append(m.Queue, queuedTask{
@@ -601,7 +601,7 @@ func (m *AppModel) triggerBuildAll() tea.Cmd {
 	m.Queue = nil
 	for _, c := range m.Components {
 		if c.IsSeparate() {
-			continue // Handled separately (explorer, tools) - not included in build all
+			continue // Handled separately (explorer, tools, tests) - not included in build all
 		}
 		m.Queue = append(m.Queue, queuedTask{
 			ComponentID: c.ID,
@@ -629,7 +629,7 @@ func (m *AppModel) triggerPublishAll() tea.Cmd {
 	m.Queue = nil
 	for _, c := range m.Components {
 		if c.IsSeparate() {
-			continue // Handled separately (explorer, tools) - not included in publish all
+			continue // Handled separately (explorer, tools, tests) - not included in publish all
 		}
 		if c.DefaultPublish.Command != "" {
 			m.Queue = append(m.Queue, queuedTask{

@@ -72,6 +72,7 @@ COMPONENTS:
   edge        MonsterMQ Edge Broker
   explorer    MonsterMQ Explorer (handled separately)
   tools       MonsterMQ Tools (cli/mmq, i3x - handled separately)
+  tests       MonsterMQ Tests (mqtt-compliance, mq-bench - handled separately)
   all         All core components sequentially (dashboard, main, edge)
 
 FLAGS:
@@ -201,7 +202,7 @@ func runBuildCmd(args []string) {
 	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to build (main, edge, dashboard, explorer, tools) or 'all'\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to build (main, edge, dashboard, explorer, tools, tests) or 'all'\n")
 		os.Exit(1)
 	}
 
@@ -272,7 +273,7 @@ func runPullCmd(args []string) {
 	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to pull (main, edge, dashboard, explorer, tools) or 'all'\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to pull (main, edge, dashboard, explorer, tools, tests) or 'all'\n")
 		os.Exit(1)
 	}
 
@@ -380,7 +381,7 @@ func runPublishCmd(args []string) {
 			for _, c := range toPublish {
 				fmt.Printf("  • %s (%s v%s)\n", c.Name, c.ID, c.Version)
 			}
-			fmt.Println("(explorer and tools are handled separately and excluded)")
+			fmt.Println("(explorer, tools and tests are handled separately and excluded)")
 			fmt.Print("\nAre you sure you want to publish all these components? [y/N]: ")
 			var response string
 			_, _ = fmt.Scanln(&response)
@@ -459,7 +460,7 @@ func runCleanCmd(args []string) {
 	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to clean (main, edge, dashboard, explorer, tools) or 'all'\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to clean (main, edge, dashboard, explorer, tools, tests) or 'all'\n")
 		os.Exit(1)
 	}
 
