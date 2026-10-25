@@ -39,7 +39,7 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 - **Broker Target Support**:
   - **Full Broker**: Supports complete historical archives, daily counts, and multi-topic aggregations.
   - **Edge Broker**: Supports localized topic value inspection/publishing, edge device sync, and feature discovery (`features`).
-- **Build System**: Cross-compilation and build management are driven by `cli/build.sh` (Linux/macOS) and `cli/build.ps1` (Windows) into `cli/bin/`.
+- **Build System**: All tools are built by the cross-platform `make.py` in the repository root (`python make.py build [--cli|--i3x|--gql|--mbp] [--all|--clean]`) into `<tool>/bin/`. Publishing is `python make.py publish`; GraphQL schema helpers are `python make.py gql-fetch` / `gql-compare`. When these commands change, update the skill files and READMEs that document them.
 
 ---
 
@@ -47,5 +47,5 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 
 - Run unit tests: `cd cli && go test ./...`
 - Verify CLI execution:
-  - Linux/macOS: `cd cli && ./build.sh && bin/mmq --help`
-  - Windows: `cd cli && .\build.ps1 && .\bin\mmq.exe --help`
+  - Linux/macOS: `python3 make.py build --cli && cli/bin/mmq --help`
+  - Windows: `py make.py build --cli; .\cli\bin\mmq.exe --help`

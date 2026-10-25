@@ -297,7 +297,7 @@ func TestToolsPublishDialog(t *testing.T) {
 	}
 }
 
-func TestBuildAllAndPublishAllQueueOrder(t *testing.T) {
+func TestBuildAllQueueOrder(t *testing.T) {
 	m, err := NewAppModel("/home/vogler/Workspace/monster")
 	if err != nil {
 		t.Fatalf("Failed to create model: %v", err)
@@ -331,32 +331,4 @@ func TestBuildAllAndPublishAllQueueOrder(t *testing.T) {
 		}
 	}
 
-	// Reset active task
-	m.ActiveTask = nil
-	m.Queue = nil
-
-	// 2. Verify triggerPublishAll queues dashboard first, then main, edge, and excludes explorer & tools
-	m.triggerPublishAll()
-
-	if m.ActiveTask == nil {
-		t.Fatalf("ActiveTask should be running after triggerPublishAll")
-	}
-	if m.ActiveTask.ComponentID != "dashboard" {
-		t.Errorf("First component to publish MUST be dashboard, got %s", m.ActiveTask.ComponentID)
-	}
-
-	if len(m.Queue) != len(expectedRemainder) {
-		t.Fatalf("Expected %d remaining queued publish tasks, got %d", len(expectedRemainder), len(m.Queue))
-	}
-	for i, exp := range expectedRemainder {
-		if m.Queue[i].ComponentID != exp {
-			t.Errorf("Publish Queue[%d] expected %s, got %s", i, exp, m.Queue[i].ComponentID)
-		}
-	}
-
-	for _, q := range m.Queue {
-		if q.ComponentID == "explorer" || q.ComponentID == "tools" || q.ComponentID == "tests" {
-			t.Errorf("Component %s should NOT be in Publish All queue", q.ComponentID)
-		}
-	}
 }

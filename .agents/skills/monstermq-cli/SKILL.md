@@ -11,7 +11,7 @@ This skill provides operational instructions and command references for using `m
 
 ## Quick Reference & Binary Location
 
-- **Binary Location**: `cli/bin/mmq` / `cli/bin/mmq.exe` (built via `cd cli && ./build.sh`, `cd cli && .\build.ps1`, or `cd cli && go build -o bin/mmq .`)
+- **Binary Location**: `cli/bin/mmq` / `cli/bin/mmq.exe` (built via `python make.py build --cli` from the tools repo root, or `cd cli && go build -o bin/mmq .`)
 - **Default Endpoint**: `http://localhost:4000/graphql`
 - **Configuration Sources**:
   - CLI flags: `--url`, `--host`, `--port`, `--mqtt-host`, `--mqtt-port`, `--https`, `--user`, `--pass`, `--token`, `-i`
@@ -265,12 +265,12 @@ The `gql/` directory maintains GraphQL SDL schemas (`main.gql` and `edge.gql`) f
 
 ```bash
 # Fetch schemas from running brokers (and optionally compare)
-./gql/fetch-schemas.sh --compare
+python make.py gql-fetch --compare
 
 # Compare schemas with the Go tool
-./gql/compare-schemas.sh
+python make.py gql-compare
 # or summary only
-(cd gql && go run . -summary)
+python make.py gql-compare -summary
 ```
 
 CLI device tests (`cli/devices_test.go`) read `main.gql` and `edge.gql` directly from `gql/` to validate actual queries, mutations, and variables without external checkout dependencies. `MMQ_CONTRACT_DIR` remains supported for optional test-only custom schema overrides.

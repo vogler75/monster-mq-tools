@@ -326,30 +326,6 @@ func (m *AppModel) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 			SelectedIdx: 0,
 		}
 
-	case "P":
-		// Publish ALL core components sequentially (dashboard, main, edge)
-		var targets []component.Target
-		for _, c := range m.Components {
-			if !c.IsSeparate() && c.DefaultPublish.Command != "" {
-				targets = append(targets, component.Target{
-					ID:          c.ID,
-					Name:        fmt.Sprintf("%s (%s v%s)", c.Name, c.ID, c.Version),
-					Description: c.DefaultPublish.Description,
-					Command:     c.DefaultPublish.Command,
-					Args:        c.DefaultPublish.Args,
-				})
-			}
-		}
-		if len(targets) == 0 {
-			m.StatusMsg = "No core components configured for Publish All."
-			return nil
-		}
-		m.Dialog = DialogModel{
-			Type:        DialogPublishAllConfirm,
-			Targets:     targets,
-			SelectedIdx: 0,
-		}
-
 	case "v", "d":
 		// Prepare next dev version
 		sel := m.selectedComponent()
@@ -529,10 +505,6 @@ func (m *AppModel) executeDialogAction() tea.Cmd {
 	d := m.Dialog
 	m.Dialog.Type = DialogNone
 
-	if d.Type == DialogPublishAllConfirm {
-		return m.triggerPublishAll()
-	}
-
 	if d.Type == DialogDevVersionAllConfirm {
 		return m.triggerDevVersionAll()
 	}
@@ -617,37 +589,6 @@ func (m *AppModel) triggerBuildAll() tea.Cmd {
 	first := m.Queue[0]
 	m.Queue = m.Queue[1:]
 	m.StatusMsg = fmt.Sprintf("Started Build All sequence (%d components queued).", len(m.Queue)+1)
-	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
-}
-
-func (m *AppModel) triggerPublishAll() tea.Cmd {
-	if m.ActiveTask != nil && m.ActiveTask.Status == runner.TaskRunning {
-		m.StatusMsg = "Cannot start Publish All: another task is already running!"
-		return nil
-	}
-
-	m.Queue = nil
-	for _, c := range m.Components {
-		if c.IsSeparate() {
-			continue // Handled separately (explorer, tools, tests) - not included in publish all
-		}
-		if c.DefaultPublish.Command != "" {
-			m.Queue = append(m.Queue, queuedTask{
-				ComponentID: c.ID,
-				Target:      c.DefaultPublish,
-				Action:      "publish",
-			})
-		}
-	}
-
-	if len(m.Queue) == 0 {
-		m.StatusMsg = "No core components configured for Publish All."
-		return nil
-	}
-
-	first := m.Queue[0]
-	m.Queue = m.Queue[1:]
-	m.StatusMsg = fmt.Sprintf("Started Publish All sequence (%d components queued).", len(m.Queue)+1)
 	return m.startTaskCmd(first.ComponentID, first.Action, first.Target)
 }
 
@@ -947,7 +888,6 @@ func (m *AppModel) renderFooter() string {
 				"[b] Build",
 				"[B] Build All",
 				"[p] Publish",
-				"[P] Publish All",
 				"[u] Pull",
 				"[f] Full Log",
 				"[?] Help",
@@ -962,7 +902,6 @@ func (m *AppModel) renderFooter() string {
 				"[u] Pull",
 				"[U] Pull All",
 				"[p] Publish",
-				"[P] Publish All",
 				"[v] Dev",
 				"[c] Clean",
 				"[f] Full Log",

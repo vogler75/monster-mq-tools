@@ -9,7 +9,8 @@ import (
 )
 
 func buildExecCmd(ctx context.Context, command string, args []string, dir string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, command, args...)
+	c, a := resolvePythonScript(command, args, dir)
+	cmd := exec.CommandContext(ctx, c, a...)
 	cmd.Dir = dir
 	prepareCmd(cmd)
 	return cmd

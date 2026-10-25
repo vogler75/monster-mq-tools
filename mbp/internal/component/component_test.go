@@ -80,11 +80,12 @@ func TestComponentTargets(t *testing.T) {
 			}
 		}
 		if c.DevVersionTarget != nil {
-			if c.DevVersionTarget.Command != "./release.sh" {
-				t.Errorf("component %s DevVersionTarget.Command expected './release.sh', got '%s'", c.ID, c.DevVersionTarget.Command)
+			wantCmd, wantArg := "./make.py", "dev"
+			if c.DevVersionTarget.Command != wantCmd {
+				t.Errorf("component %s DevVersionTarget.Command expected '%s', got '%s'", c.ID, wantCmd, c.DevVersionTarget.Command)
 			}
-			if len(c.DevVersionTarget.Args) == 0 || c.DevVersionTarget.Args[0] != "--dev" {
-				t.Errorf("component %s DevVersionTarget.Args expected to start with '--dev', got %v", c.ID, c.DevVersionTarget.Args)
+			if len(c.DevVersionTarget.Args) == 0 || c.DevVersionTarget.Args[0] != wantArg {
+				t.Errorf("component %s DevVersionTarget.Args expected to start with '%s', got %v", c.ID, wantArg, c.DevVersionTarget.Args)
 			}
 		}
 	}

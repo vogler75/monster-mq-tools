@@ -11,7 +11,7 @@ This skill provides operational instructions and command references for using th
 
 ## Quick Reference & Binary Location
 
-- **Binary Location**: `i3x/bin/i3x` (built via `cd i3x && ./build.sh`)
+- **Binary Location**: `i3x/bin/i3x` (`i3x/bin/i3x.exe` on Windows; built via `python make.py build --i3x` from the tools repo root)
 - **Default Endpoint**: `https://api.i3x.dev` (or configured via `I3X_URL` / `-u <url>`)
 - **API Spec Reference**: `https://api.i3x.dev/v1/docs` (i3X 1.0)
 - **Configuration Sources**:

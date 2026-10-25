@@ -61,25 +61,19 @@
 
 ### Prerequisites
 - [Go 1.20+](https://go.dev/doc/install) (for building from source)
-- `bash` (for `./build.sh` on Linux/macOS) or PowerShell (for `.\build.ps1` on Windows)
+- Python 3.9+ (for `make.py`; standard library only, same command on Linux, macOS and Windows)
 
 ### Build from Source
 
-You can build `mmq` using the included build scripts:
+You can build `mmq` with `make.py` in the repository root (the parent of `cli/`):
 
 ```bash
-# Linux / macOS (Bash)
-./build.sh            # Native binary (placed in bin/mmq)
-./build.sh --all      # Cross-compile for Linux, macOS, Windows
-./build.sh --clean    # Clean output directory
+python make.py build --cli            # Native binary (cli/bin/mmq, cli/bin/mmq.exe on Windows)
+python make.py build --cli --all      # Also cross-compile for Linux, macOS, Windows
+python make.py build --cli --clean    # Clean cli/bin/
 ```
 
-```powershell
-# Windows (PowerShell)
-.\build.ps1           # Native binary (placed in bin/mmq.exe)
-.\build.ps1 -All      # Cross-compile for Linux, macOS, Windows
-.\build.ps1 -Clean    # Clean output directory
-```
+On Windows `py make.py ...` works as well; on macOS/Linux use `python3` if `python` is not Python 3.
 
 Alternatively, compile directly with standard `go`:
 
@@ -747,12 +741,12 @@ You can update the schemas from running brokers and compare them using the tools
 
 ```bash
 # Fetch schemas from running brokers and compare
-./gql/fetch-schemas.sh --compare
+python make.py gql-fetch --compare
 
 # Compare schemas with the Go tool
-./gql/compare-schemas.sh
+python make.py gql-compare
 # or
-(cd gql && go run . -summary)
+python make.py gql-compare -summary
 ```
 
 `MMQ_CONTRACT_DIR` remains supported as an optional test-only environment variable to override schemas with a custom directory containing `main/` and `edge/` contracts if desired.

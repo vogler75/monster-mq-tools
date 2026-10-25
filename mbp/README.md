@@ -20,25 +20,25 @@ It provides both an interactive **Terminal User Interface (TUI)** built with Cha
 - **Target Selection & Single/Batch Builds**: Build individual targets (e.g. Docker only, Debian only, macOS only) or batch build all components in sequence (`[B]`).
 - **Live Output Streaming & Observation**: View real-time `stdout` and `stderr` logs, execution timer, autoscroll toggle, and fullscreen log zoom (`[f]`).
 - **Process Cancellation**: Safely terminate long-running or stuck builds along with their entire process groups (`[x]` or `Ctrl+C`).
-- **Release Publishing**: Interactive target selection and safeguards to execute each component's `publish.sh` workflow.
+- **Release Publishing**: Interactive target selection and safeguards to execute each component's publish workflow (`make.py publish`).
 
 ---
 
 ## Installation & Build
 
-Compile the native binary with the build script:
+Compile the native binary with `make.py` in the tools repository root (the parent of `mbp/`):
 
 ```bash
-cd mbp
-./build.sh
+python make.py build --mbp
 ```
 
-This compiles the binary into `mbp/bin/mbp`.
+This compiles the binary into `mbp/bin/mbp` (`mbp/bin/mbp.exe` on Windows). On Windows a
+running `mbp.exe` is moved aside to `mbp.exe~` so mbp can rebuild itself.
 
-To cross-compile for Linux, macOS (Intel & Apple Silicon), and Windows:
+To also cross-compile for Linux, macOS (Intel & Apple Silicon), and Windows:
 
 ```bash
-./build.sh --all
+python make.py build --mbp --all
 ```
 
 ---
@@ -63,7 +63,6 @@ Launch the interactive dashboard:
 | `u` | Run `git pull` for selected component (streams live logs to viewer) |
 | `U` | Run batch **Pull All** components sequentially |
 | `p` | Open publish confirmation dialog for selected component |
-| `P` | Open batch **Publish All** dialog (`dashboard`, `main`, `edge`) |
 | `c` | Clean build outputs for selected component |
 | `g` | Run `git fetch` across all repositories in background & refresh statuses |
 | `r` | Refresh component & artifact statuses immediately |
@@ -132,10 +131,9 @@ Launch the interactive dashboard:
 ./bin/mbp publish edge --target publish-all -y
 ./bin/mbp publish tools -y
 ./bin/mbp publish tools --target publish-build-all -y
-
-# Publish all core components sequentially (dashboard, main, edge)
-./bin/mbp publish all -y
 ```
+
+Components are published one at a time; there is no batch "publish all".
 
 ### Clean Artifacts
 
@@ -147,7 +145,7 @@ Launch the interactive dashboard:
 ./bin/mbp clean all
 ```
 
-### Advance to Next Dev Version (`release.sh --dev`)
+### Advance to Next Dev Version (`make.py dev`)
 
 ```bash
 # Advance specific component to next dev version

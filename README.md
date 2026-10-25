@@ -25,21 +25,18 @@ The primary CLI tool is located in the [`cli/`](cli) directory.
 
 ### Build from Source
 
+All tools are built with one cross-platform Python 3 entry point in the repository root
+(standard library only; on Windows use `py` or `python`, on macOS/Linux `python3`):
+
 ```bash
-# Navigate to the CLI directory
-cd cli
-
-# Linux / macOS (Bash)
-./build.sh          # Native binary (placed in bin/mmq)
-./build.sh --all    # Cross-compile binaries for Linux, macOS, and Windows
+python make.py build --cli         # Native binary (cli/bin/mmq, cli/bin/mmq.exe on Windows)
+python make.py build --cli --all   # Also cross-compile for Linux, macOS, and Windows
+python make.py build               # Native binaries for all tools (mmq, i3x, compare-schemas, mbp)
+python make.py build --all         # Cross-compile all tools
+python make.py build --clean       # Remove all <tool>/bin/ directories
 ```
 
-```powershell
-# Windows (PowerShell)
-cd cli
-.\build.ps1         # Native binary (placed in bin\mmq.exe)
-.\build.ps1 -All    # Cross-compile binaries for Linux, macOS, and Windows
-```
+Run `python make.py help` for all commands (build, publish, gql-fetch, gql-compare, release, ...).
 
 ### Usage Examples
 
@@ -112,16 +109,16 @@ To fetch and update schemas from running broker instances:
 
 ```bash
 # Fetch both MonsterMQ Core and Edge schemas
-./gql/fetch-schemas.sh
+python make.py gql-fetch
 
 # Fetch only MonsterMQ Core schema
-./gql/fetch-schemas.sh -m
+python make.py gql-fetch -m
 
 # Fetch only Edge Broker schema
-./gql/fetch-schemas.sh -e
+python make.py gql-fetch -e
 ```
 
-*(Run `./gql/fetch-schemas.sh -h` for full usage, custom URLs, and environment variable options).*
+*(Run `python make.py gql-fetch -h` for full usage, custom URLs, and environment variable options).*
 
 ---
 
@@ -165,12 +162,12 @@ The `gql/` directory contains GraphQL SDL schemas (`main.gql` and `edge.gql`) fe
 
 ```bash
 # Fetch schemas from running brokers (and optionally compare)
-./gql/fetch-schemas.sh --compare
+python make.py gql-fetch --compare
 
 # Compare schemas (main.gql vs edge.gql)
-./gql/compare-schemas.sh
+python make.py gql-compare
 # or with summary only
-(cd gql && go run . -summary)
+python make.py gql-compare -summary
 ```
 
 Device tests in `cli/` validate actual GraphQL requests and schema introspection directly against `gql/main.gql` and `gql/edge.gql` (or `MMQ_CONTRACT_DIR` if overridden). Run unit tests via `(cd cli && go test ./...)`.
@@ -182,8 +179,8 @@ Device tests in `cli/` validate actual GraphQL requests and schema introspection
 Located in [`mbp/`](mbp). Provides an interactive Terminal UI and headless CLI to inspect, compile, build, observe, and publish all MonsterMQ components (`main`, `edge`, `dashboard`, `explorer`, `tools`).
 
 ```bash
-# Build the mbp tool
-(cd mbp && ./build.sh)
+# Build the mbp tool (mbp/bin/mbp, mbp/bin/mbp.exe on Windows)
+python make.py build --mbp
 
 # Launch interactive Terminal UI
 ./mbp/bin/mbp

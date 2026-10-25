@@ -61,8 +61,8 @@ USAGE:
   mbp status [flags]             Print status table of all components to stdout
   mbp build <comp|all> [flags]   Build a component or all components headlessly
   mbp pull <comp|all> [flags]    Pull latest git updates for component or all
-  mbp publish <comp|all> [flags] Publish release assets headlessly
-  mbp dev <comp|all> [flags]     Advance component(s) to next dev version (release.sh --dev)
+  mbp publish <comp> [flags]     Publish release assets headlessly (one component at a time)
+  mbp dev <comp|all> [flags]     Advance component(s) to next dev version (make.py dev)
   mbp clean <comp|all> [flags]   Clean build artifacts
   mbp version                    Display version
 
@@ -343,7 +343,7 @@ func runPublishCmd(args []string) {
 	_ = fs.Parse(reorderArgs(args))
 
 	if fs.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (dashboard, main, edge, explorer, tools) or 'all'\n")
+		fmt.Fprintf(os.Stderr, "Error: Specify a component ID to publish (dashboard, main, edge, explorer, tools, tests)\n")
 		os.Exit(1)
 	}
 
@@ -361,54 +361,9 @@ func runPublishCmd(args []string) {
 	}
 
 	if targetComp == "all" {
-		var toPublish []*component.Component
-		for _, c := range comps {
-			if c.IsSeparate() {
-				continue
-			}
-			if c.DefaultPublish.Command != "" {
-				toPublish = append(toPublish, c)
-			}
-		}
-
-		if len(toPublish) == 0 {
-			fmt.Println("No core components configured for publishing.")
-			return
-		}
-
-		if !*yesFlag {
-			fmt.Println("The following core components will be published sequentially:")
-			for _, c := range toPublish {
-				fmt.Printf("  • %s (%s v%s)\n", c.Name, c.ID, c.Version)
-			}
-			fmt.Println("(explorer, tools and tests are handled separately and excluded)")
-			fmt.Print("\nAre you sure you want to publish all these components? [y/N]: ")
-			var response string
-			_, _ = fmt.Scanln(&response)
-			if strings.ToLower(strings.TrimSpace(response)) != "y" {
-				fmt.Println("Publishing aborted.")
-				return
-			}
-		}
-
-		for _, c := range toPublish {
-			fmt.Printf("\n=== Publishing %s (%s) ===\n", c.Name, c.ID)
-			target := c.DefaultPublish
-			if *targetFlag != "" {
-				for _, t := range c.PublishTargets {
-					if t.ID == *targetFlag {
-						target = t
-						break
-					}
-				}
-			}
-			if err := executeTaskCLI(c.ID, "publish", target, c.Directory); err != nil {
-				fmt.Fprintf(os.Stderr, "Publish failed for %s: %v\n", c.ID, err)
-				os.Exit(1)
-			}
-		}
-		fmt.Println("\n✔ All core components published successfully!")
-		return
+		// Publishing is deliberately one component at a time.
+		fmt.Fprintf(os.Stderr, "Error: 'mbp publish all' is not supported; publish one component at a time, e.g. 'mbp publish main'\n")
+		os.Exit(1)
 	}
 
 	comp, err := component.FindComponent(comps, targetComp)

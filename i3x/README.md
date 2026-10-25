@@ -24,17 +24,16 @@ Official command-line tool and interactive REPL client for **i3X (Industrial Inf
 
 ### Build from Source
 
-Requirements: Go 1.22+
+Requirements: Go 1.22+, Python 3.9+ (for `make.py` in the repository root)
 
 ```bash
-# Navigate to the i3x directory
-cd i3x
+# From the repository root (the parent of i3x/)
 
-# Build native binary for host OS (placed in i3x/bin/i3x)
-./build.sh
+# Build native binary for host OS (placed in i3x/bin/i3x, i3x/bin/i3x.exe on Windows)
+python make.py build --i3x
 
-# Cross-compile for Linux, macOS, and Windows
-./build.sh --all
+# Also cross-compile for Linux, macOS, and Windows
+python make.py build --i3x --all
 ```
 
 ---

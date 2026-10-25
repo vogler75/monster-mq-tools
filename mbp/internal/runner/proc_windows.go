@@ -12,7 +12,8 @@ import (
 )
 
 func buildExecCmd(ctx context.Context, command string, args []string, dir string) *exec.Cmd {
-	c, a := resolveWindowsCmd(command, args, dir)
+	c, a := resolvePythonScript(command, args, dir)
+	c, a = resolveWindowsCmd(c, a, dir)
 	cmd := exec.CommandContext(ctx, c, a...)
 	cmd.Dir = dir
 	prepareCmd(cmd)

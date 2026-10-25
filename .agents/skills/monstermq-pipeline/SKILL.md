@@ -12,7 +12,7 @@ This skill provides operational instructions and command references for using `m
 ## Quick Reference & Binary Location
 
 - **Directory**: [`mbp/`](file:///Users/vogler/Workspace/monster/tools/mbp/)
-- **Binary Location**: `mbp/bin/mbp` (built via `cd mbp && ./build.sh`)
+- **Binary Location**: `mbp/bin/mbp` (`mbp/bin/mbp.exe` on Windows; built via `python make.py build --mbp` from the tools repo root)
 - **Default Target Components**:
   - `main`: MonsterMQ Core (`../main`)
   - `edge`: MonsterMQ Edge Broker (`../edge`)
@@ -20,6 +20,7 @@ This skill provides operational instructions and command references for using `m
   - `explorer`: MonsterMQ Explorer (`../explorer`)
   - `tools`: MonsterMQ Tools (`.` or `../tools`)
 - **Root Resolution**: Looks for parent directory containing `main` and `edge`, or customizable via `--root <path>` / `MONSTER_ROOT`.
+- **Component Commands**: every component (dashboard, main, edge, explorer, tools, tests) has one cross-platform entry point, `make.py <command> [flags]` (`build`, `publish`, `dev`, …); mbp runs it via `py -3` (Windows) or `python3`. `mbp dev` runs `make.py dev`.
 
 ---
 

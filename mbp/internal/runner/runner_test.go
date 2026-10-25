@@ -102,3 +102,38 @@ func TestPowerShellScriptExecution(t *testing.T) {
 		t.Errorf("expected line containing 'Hello Monster from PowerShell', got lines: %+v", lines)
 	}
 }
+
+func TestPythonScriptExecution(t *testing.T) {
+	tmpDir := t.TempDir()
+	script := "import sys\nprint('Hello ' + ' '.join(sys.argv[1:]) + ' from Python')\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "make.py"), []byte(script), 0644); err != nil {
+		t.Fatalf("failed to write test script: %v", err)
+	}
+
+	task := NewTask("test", "dev", "py-test", "./make.py", []string{"dev"}, tmpDir)
+	if err := task.Start(context.Background()); err != nil {
+		t.Fatalf("failed to start task: %v", err)
+	}
+	<-task.DoneChan()
+
+	if task.Status != TaskSuccess {
+		t.Fatalf("expected status %s, got %s (error: %s, lines: %+v)", TaskSuccess, task.Status, task.Error, task.GetLines())
+	}
+	found := false
+	for _, l := range task.GetLines() {
+		if strings.Contains(l.Text, "Hello dev from Python") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected Python output, got lines: %+v", task.GetLines())
+	}
+}
+
+func TestResolvePythonScriptKeepsOtherCommands(t *testing.T) {
+	c, a := resolvePythonScript("./build.sh", []string{"--all"}, t.TempDir())
+	if c != "./build.sh" || len(a) != 1 || a[0] != "--all" {
+		t.Errorf("expected command unchanged, got %q %v", c, a)
+	}
+}

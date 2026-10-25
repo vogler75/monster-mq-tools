@@ -63,18 +63,9 @@ func dirExists(path string) bool {
 // GetStandardRegistry returns the list of predefined MonsterMQ components configured for rootDir.
 func GetStandardRegistry(rootDir string) []*Component {
 	isWin := runtime.GOOS == "windows"
-	mainBuild := "./build.sh"
-	edgeBuild := "./build.sh"
-	dashBuild := "./build.sh"
-	toolsBuild := "./build.sh"
-	testsBuild := "./build.sh"
-	if isWin {
-		mainBuild = "./build.ps1"
-		edgeBuild = "./build.ps1"
-		dashBuild = "./build.ps1"
-		toolsBuild = "./build.ps1"
-		testsBuild = "./build.ps1"
-	}
+	// Every component has one cross-platform entry point: "make.py <command> [flags]"
+	// (the runner starts .py files with a Python 3 interpreter).
+	const makePy = "./make.py"
 
 	components := []*Component{
 		{
@@ -90,88 +81,88 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All",
 				Description: "Build web bundle and all desktop packages",
-				Command:     dashBuild,
-				Args:        []string{"--all"},
+				Command:     makePy,
+				Args:        []string{"build", "--all"},
 			},
 			BuildTargets: []Target{
 				{
 					ID:          "build-all",
 					Name:        "All Packages (Web + Desktop)",
 					Description: "Build web bundle and all desktop packages",
-					Command:     dashBuild,
-					Args:        []string{"--all"},
+					Command:     makePy,
+					Args:        []string{"build", "--all"},
 				},
 				{
 					ID:          "build-web",
 					Name:        "Web Bundle Only",
 					Description: "Build web dashboard assets (dist/)",
-					Command:     dashBuild,
-					Args:        []string{"--web"},
+					Command:     makePy,
+					Args:        []string{"build", "--web"},
 				},
 				{
 					ID:          "build-desktop",
 					Name:        "Desktop Apps Only",
 					Description: "Build macOS DMG & Windows NSIS setup",
-					Command:     dashBuild,
-					Args:        []string{"--desktop"},
+					Command:     makePy,
+					Args:        []string{"build", "--desktop"},
 				},
 				{
 					ID:          "build-mac",
 					Name:        "macOS DMG Only",
 					Description: "Build macOS desktop DMG app only",
-					Command:     dashBuild,
-					Args:        []string{"--mac"},
+					Command:     makePy,
+					Args:        []string{"build", "--mac"},
 				},
 				{
 					ID:          "build-win",
 					Name:        "Windows Setup Only",
 					Description: "Build Windows desktop NSIS setup only",
-					Command:     dashBuild,
-					Args:        []string{"--win"},
+					Command:     makePy,
+					Args:        []string{"build", "--win"},
 				},
 			},
 			CleanTarget: &Target{
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean dist/ and dist-desktop/ directories",
-				Command:     dashBuild,
-				Args:        []string{"--clean"},
+				Command:     makePy,
+				Args:        []string{"build", "--clean"},
 			},
 			DevVersionTarget: &Target{
 				ID:          "bump-dev",
 				Name:        "Prepare Dev Version",
-				Description: "Advance to next development version (release.sh --dev)",
-				Command:     "./release.sh",
-				Args:        []string{"--dev"},
+				Description: "Advance to next development version (make.py dev)",
+				Command:     makePy,
+				Args:        []string{"dev"},
 			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All",
 				Description: "Publish desktop apps to GitHub Release",
-				Command:     "./publish.sh",
-				Args:        []string{"--all", "-y"},
+				Command:     makePy,
+				Args:        []string{"publish", "--all", "-y"},
 			},
 			PublishTargets: []Target{
 				{
 					ID:          "publish-all",
 					Name:        "Publish All Desktop Packages",
 					Description: "Publish macOS DMG and Windows setup to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{"--all", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--all", "-y"},
 				},
 				{
 					ID:          "publish-mac",
 					Name:        "Publish macOS DMG Only",
 					Description: "Publish macOS DMG package only",
-					Command:     "./publish.sh",
-					Args:        []string{"--mac", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--mac", "-y"},
 				},
 				{
 					ID:          "publish-win",
 					Name:        "Publish Windows Setup Only",
 					Description: "Publish Windows setup package only",
-					Command:     "./publish.sh",
-					Args:        []string{"--win", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--win", "-y"},
 				},
 			},
 			ArtifactGlobs: []string{
@@ -193,102 +184,102 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All (Container)",
 				Description: "Build standalone Java broker zip in container, cross-platform setup binaries, and docker image",
-				Command:     mainBuild,
-				Args:        []string{"--all", "-c"},
+				Command:     makePy,
+				Args:        []string{"build", "--all", "-c"},
 			},
 			BuildTargets: []Target{
 				{
 					ID:          "build-all",
 					Name:        "All Artifacts (Container)",
 					Description: "Build broker zip in container, setup executables, and docker image",
-					Command:     mainBuild,
-					Args:        []string{"--all", "-c"},
+					Command:     makePy,
+					Args:        []string{"build", "--all", "-c"},
 				},
 				{
 					ID:          "build-broker",
 					Name:        "Broker Zip Only (Container)",
 					Description: "Build standalone Java broker bundle in container (zip)",
-					Command:     mainBuild,
-					Args:        []string{"--broker", "-c"},
+					Command:     makePy,
+					Args:        []string{"build", "--broker", "-c"},
 				},
 				{
 					ID:          "build-setup",
 					Name:        "Setup Executables Only",
 					Description: "Build cross-platform Go setup binaries (setup.exe, setup-mac, etc.)",
-					Command:     mainBuild,
-					Args:        []string{"--setup"},
+					Command:     makePy,
+					Args:        []string{"build", "--setup"},
 				},
 				{
 					ID:          "build-docker",
 					Name:        "Docker Image Only",
 					Description: "Build local Docker image for host platform",
-					Command:     mainBuild,
-					Args:        []string{"--docker"},
+					Command:     makePy,
+					Args:        []string{"build", "--docker"},
 				},
 				{
 					ID:          "build-all-local",
 					Name:        "All Artifacts (Host/Local)",
 					Description: "Build broker zip on host without Docker container",
-					Command:     mainBuild,
-					Args:        []string{"--all"},
+					Command:     makePy,
+					Args:        []string{"build", "--all"},
 				},
 				{
 					ID:          "build-broker-local",
 					Name:        "Broker Zip Only (Host/Local)",
 					Description: "Build standalone Java broker bundle on host without Docker container",
-					Command:     mainBuild,
-					Args:        []string{"--broker"},
+					Command:     makePy,
+					Args:        []string{"build", "--broker"},
 				},
 			},
 			CleanTarget: &Target{
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean output build directories",
-				Command:     mainBuild,
-				Args:        []string{"--clean"},
+				Command:     makePy,
+				Args:        []string{"build", "--clean"},
 			},
 			DevVersionTarget: &Target{
 				ID:          "bump-dev",
 				Name:        "Prepare Dev Version",
-				Description: "Advance to next development version (release.sh --dev)",
-				Command:     "./release.sh",
-				Args:        []string{"--dev"},
+				Description: "Advance to next development version (make.py dev)",
+				Command:     makePy,
+				Args:        []string{"dev"},
 			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All",
 				Description: "Upload release assets to GitHub Release and push multi-arch Docker image",
-				Command:     "./publish.sh",
-				Args:        []string{"--all", "-y"},
+				Command:     makePy,
+				Args:        []string{"publish", "--all", "-y"},
 			},
 			PublishTargets: []Target{
 				{
 					ID:          "publish-all",
 					Name:        "Publish All (GitHub + Docker)",
 					Description: "Publish all GitHub release assets and push Docker images",
-					Command:     "./publish.sh",
-					Args:        []string{"--all", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--all", "-y"},
 				},
 				{
 					ID:          "publish-broker",
 					Name:        "Publish Broker Bundle Only",
 					Description: "Publish broker .zip to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{"--broker", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--broker", "-y"},
 				},
 				{
 					ID:          "publish-setup",
 					Name:        "Publish Setup Binaries Only",
 					Description: "Publish setup executables to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{"--setup", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--setup", "-y"},
 				},
 				{
 					ID:          "publish-docker",
 					Name:        "Publish Docker Hub Only",
 					Description: "Build and push multi-arch Docker images to Docker Hub",
-					Command:     "./publish.sh",
-					Args:        []string{"--docker", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--docker", "-y"},
 				},
 			},
 			ArtifactGlobs: []string{
@@ -309,81 +300,81 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All",
 				Description: "Build native Go binary, Debian packages, and Docker image",
-				Command:     edgeBuild,
-				Args:        []string{"--all"},
+				Command:     makePy,
+				Args:        []string{"build", "--all"},
 			},
 			BuildTargets: []Target{
 				{
 					ID:          "build-all",
 					Name:        "All Artifacts",
 					Description: "Build binary, Debian packages, and Docker image",
-					Command:     edgeBuild,
-					Args:        []string{"--all"},
+					Command:     makePy,
+					Args:        []string{"build", "--all"},
 				},
 				{
 					ID:          "build-binary",
 					Name:        "Native Binary Only",
 					Description: "Build native Go binary for current machine",
-					Command:     edgeBuild,
-					Args:        []string{"--binary"},
+					Command:     makePy,
+					Args:        []string{"build", "--binary"},
 				},
 				{
 					ID:          "build-deb",
 					Name:        "Debian Packages Only",
 					Description: "Build Debian packages for all architectures (arm64, armhf, amd64)",
-					Command:     edgeBuild,
-					Args:        []string{"--deb"},
+					Command:     makePy,
+					Args:        []string{"build", "--deb"},
 				},
 				{
 					ID:          "build-docker",
 					Name:        "Docker Image Only",
 					Description: "Build local Docker image for host platform",
-					Command:     edgeBuild,
-					Args:        []string{"--docker"},
+					Command:     makePy,
+					Args:        []string{"build", "--docker"},
 				},
 			},
 			CleanTarget: &Target{
 				ID:          "clean",
 				Name:        "Clean",
 				Description: "Clean build output directories",
-				Command:     edgeBuild,
-				Args:        []string{"--clean"},
+				Command:     makePy,
+				Args:        []string{"build", "--clean"},
 			},
 			DevVersionTarget: &Target{
 				ID:          "bump-dev",
 				Name:        "Prepare Dev Version",
-				Description: "Advance to next development version (release.sh --dev)",
-				Command:     "./release.sh",
-				Args:        []string{"--dev"},
+				Description: "Advance to next development version (make.py dev)",
+				Command:     makePy,
+				Args:        []string{"dev"},
 			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All",
 				Description: "Publish Debian packages to GitHub Release and push Docker image",
-				Command:     "./publish.sh",
-				Args:        []string{"--all", "-y"},
+				Command:     makePy,
+				Args:        []string{"publish", "--all", "-y"},
 			},
 			PublishTargets: []Target{
 				{
 					ID:          "publish-all",
 					Name:        "Publish All (GitHub + Docker)",
 					Description: "Publish Debian packages to GitHub and push Docker image",
-					Command:     "./publish.sh",
-					Args:        []string{"--all", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--all", "-y"},
 				},
 				{
 					ID:          "publish-github",
 					Name:        "Publish GitHub Release Only",
 					Description: "Upload Debian packages to GitHub Release only",
-					Command:     "./publish.sh",
-					Args:        []string{"--github", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--github", "-y"},
 				},
 				{
 					ID:          "publish-docker",
 					Name:        "Publish Docker Hub Only",
 					Description: "Build and push multi-arch Docker image to Docker Hub",
-					Command:     "./publish.sh",
-					Args:        []string{"--docker", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--docker", "-y"},
 				},
 			},
 			ArtifactGlobs: []string{
@@ -406,9 +397,9 @@ func GetStandardRegistry(rootDir string) []*Component {
 			DevVersionTarget: &Target{
 				ID:          "bump-dev",
 				Name:        "Prepare Dev Version",
-				Description: "Advance to next development version (release.sh --dev)",
-				Command:     "./release.sh",
-				Args:        []string{"--dev"},
+				Description: "Advance to next development version (make.py dev)",
+				Command:     makePy,
+				Args:        []string{"dev"},
 			},
 			DefaultPublish: defaultExplorerPublish(isWin),
 			PublishTargets: explorerPublishTargets(isWin),
@@ -433,74 +424,74 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-native",
 				Name:        "Build Native Tools",
 				Description: "Build native binaries for all tools (mmq, i3x, gql, mbp)",
-				Command:     toolsBuild,
-				Args:        []string{"--native"},
+				Command:     makePy,
+				Args:        []string{"build", "--native"},
 			},
 			BuildTargets: []Target{
 				{
 					ID:          "build-native",
 					Name:        "Build Native Tools",
 					Description: "Build native binaries for all tools (mmq, i3x, gql, mbp)",
-					Command:     toolsBuild,
-					Args:        []string{"--native"},
+					Command:     makePy,
+					Args:        []string{"build", "--native"},
 				},
 				{
 					ID:          "build-all",
 					Name:        "Cross-compile All Tools",
 					Description: "Cross-compile all tools for linux, darwin, and windows",
-					Command:     toolsBuild,
-					Args:        []string{"--all"},
+					Command:     makePy,
+					Args:        []string{"build", "--all"},
 				},
 				{
 					ID:          "build-cli",
 					Name:        "Build mmq CLI Only",
 					Description: "Build MonsterMQ CLI native binary only",
-					Command:     toolsBuild,
-					Args:        []string{"--cli"},
+					Command:     makePy,
+					Args:        []string{"build", "--cli"},
 				},
 				{
 					ID:          "build-i3x",
 					Name:        "Build i3x CLI Only",
 					Description: "Build i3x CLI native binary only",
-					Command:     toolsBuild,
-					Args:        []string{"--i3x"},
+					Command:     makePy,
+					Args:        []string{"build", "--i3x"},
 				},
 				{
 					ID:          "build-mbp",
 					Name:        "Build mbp Pipeline Only",
 					Description: "Build mbp pipeline binary only",
-					Command:     toolsBuild,
-					Args:        []string{"--mbp"},
+					Command:     makePy,
+					Args:        []string{"build", "--mbp"},
 				},
 			},
 			CleanTarget: &Target{
 				ID:          "clean",
 				Name:        "Clean Tools",
 				Description: "Clean all tools bin/ directories",
-				Command:     toolsBuild,
-				Args:        []string{"--clean"},
+				Command:     makePy,
+				Args:        []string{"build", "--clean"},
 			},
 			DefaultPublish: Target{
 				ID:          "publish-all",
 				Name:        "Publish All Tools",
 				Description: "Upload release binaries for all tools to GitHub Release",
-				Command:     "./publish.sh",
-				Args:        []string{"--all", "-y"},
+				Command:     makePy,
+				Args:        []string{"publish", "--all", "-y"},
 			},
 			PublishTargets: []Target{
 				{
 					ID:          "publish-all",
 					Name:        "Publish All Tools",
 					Description: "Upload release binaries for all tools to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{"--all", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--all", "-y"},
 				},
 				{
 					ID:          "publish-build-all",
 					Name:        "Build & Publish All Tools",
 					Description: "Cross-compile all tools first and upload to GitHub Release",
-					Command:     "./publish.sh",
-					Args:        []string{"--build", "-y"},
+					Command:     makePy,
+					Args:        []string{"publish", "--build", "-y"},
 				},
 			},
 			ArtifactGlobs: []string{
@@ -523,45 +514,45 @@ func GetStandardRegistry(rootDir string) []*Component {
 				ID:          "build-all",
 				Name:        "Build All Test Programs",
 				Description: "Build mqtt-compliance and mq-bench binaries",
-				Command:     testsBuild,
-				Args:        []string{"--all"},
+				Command:     makePy,
+				Args:        []string{"build", "--all"},
 			},
 			BuildTargets: []Target{
 				{
 					ID:          "build-all",
 					Name:        "Build All Test Programs",
 					Description: "Build mqtt-compliance and mq-bench binaries",
-					Command:     testsBuild,
-					Args:        []string{"--all"},
+					Command:     makePy,
+					Args:        []string{"build", "--all"},
 				},
 				{
 					ID:          "build-test",
 					Name:        "Build & Unit Test All",
 					Description: "Build all test programs and run their unit tests",
-					Command:     testsBuild,
-					Args:        []string{"--all", "--test"},
+					Command:     makePy,
+					Args:        []string{"build", "--all", "--test"},
 				},
 				{
 					ID:          "build-compliance",
 					Name:        "Build mqtt-compliance Only",
 					Description: "Build MQTT compliance suite binary only",
-					Command:     testsBuild,
-					Args:        []string{"--compliance"},
+					Command:     makePy,
+					Args:        []string{"build", "--compliance"},
 				},
 				{
 					ID:          "build-performance",
 					Name:        "Build mq-bench Only",
 					Description: "Build multi-protocol benchmark binary only",
-					Command:     testsBuild,
-					Args:        []string{"--performance"},
+					Command:     makePy,
+					Args:        []string{"build", "--performance"},
 				},
 			},
 			CleanTarget: &Target{
 				ID:          "clean",
 				Name:        "Clean Test Programs",
 				Description: "Remove mqtt-compliance and mq-bench binaries",
-				Command:     testsBuild,
-				Args:        []string{"--clean"},
+				Command:     makePy,
+				Args:        []string{"build", "--clean"},
 			},
 			ArtifactGlobs: []string{
 				"compliance/mqtt-compliance",
@@ -581,124 +572,76 @@ func defaultExplorerBuild(isWin bool) Target {
 			ID:          "build-win",
 			Name:        "Windows Setup Only",
 			Description: "Build Windows Electron EXE installer",
-			Command:     "./build-win.ps1",
-			Args:        []string{"-b"},
+			Command:     "./make.py",
+			Args:        []string{"build", "--win"},
 		}
 	}
 	return Target{
 		ID:          "build-all",
 		Name:        "Build All Platforms",
-		Description: "Build macOS and Windows Electron app packages",
-		Command:     "./build.sh",
-		Args:        []string{},
+		Description: "Build macOS, Windows and Linux Electron app packages",
+		Command:     "./make.py",
+		Args:        []string{"build", "--all"},
 	}
 }
 
 func explorerBuildTargets(isWin bool) []Target {
-	if isWin {
-		return []Target{
-			{
-				ID:          "build-win",
-				Name:        "Windows Setup Only",
-				Description: "Build Windows Electron EXE installer",
-				Command:     "./build-win.ps1",
-				Args:        []string{"-b"},
-			},
-			{
-				ID:          "build-pwa",
-				Name:        "PWA Web Bundle",
-				Description: "Build production PWA bundle (dist/)",
-				Command:     "./build-pwa.ps1",
-				Args:        []string{},
-			},
-			{
-				ID:          "build-docker",
-				Name:        "Docker Image",
-				Description: "Build Explorer web docker container",
-				Command:     "./build-docker.sh",
-				Args:        []string{},
-			},
-		}
-	}
-	return []Target{
-		{
-			ID:          "build-all",
-			Name:        "All Platforms",
-			Description: "Build macOS and Windows Electron app packages",
-			Command:     "./build.sh",
-			Args:        []string{},
-		},
-		{
-			ID:          "build-mac",
-			Name:        "macOS App Only",
-			Description: "Build macOS Electron DMG packages",
-			Command:     "./build-mac.sh",
-			Args:        []string{},
-		},
+	targets := []Target{
 		{
 			ID:          "build-win",
 			Name:        "Windows Setup Only",
 			Description: "Build Windows Electron EXE installer",
-			Command:     "./build-win.sh",
-			Args:        []string{},
+			Command:     "./make.py",
+			Args:        []string{"build", "--win"},
 		},
 		{
 			ID:          "build-pwa",
 			Name:        "PWA Web Bundle",
 			Description: "Build production PWA bundle (dist/)",
-			Command:     "./build-pwa.sh",
-			Args:        []string{},
+			Command:     "./make.py",
+			Args:        []string{"build", "--pwa"},
 		},
 		{
 			ID:          "build-docker",
 			Name:        "Docker Image",
-			Description: "Build Explorer web docker container",
-			Command:     "./build-docker.sh",
-			Args:        []string{},
+			Description: "Build Explorer web bundle in a Docker container",
+			Command:     "./make.py",
+			Args:        []string{"build", "--docker"},
 		},
 	}
+	if isWin {
+		return targets
+	}
+	return append([]Target{
+		{
+			ID:          "build-all",
+			Name:        "All Platforms",
+			Description: "Build macOS, Windows and Linux Electron app packages",
+			Command:     "./make.py",
+			Args:        []string{"build", "--all"},
+		},
+		{
+			ID:          "build-mac",
+			Name:        "macOS App Only",
+			Description: "Build macOS Electron packages",
+			Command:     "./make.py",
+			Args:        []string{"build", "--mac"},
+		},
+	}, targets...)
 }
 
 func defaultExplorerPublish(isWin bool) Target {
-	if isWin {
-		return Target{
-			ID:          "publish",
-			Name:        "Publish Windows Setup to GitHub",
-			Description: "Upload Windows release artifacts in release/ to GitHub Release via gh CLI",
-			Command:     "./build-win.ps1",
-			Args:        []string{"-u"},
-		}
-	}
 	return Target{
 		ID:          "publish",
 		Name:        "Publish GitHub Release",
 		Description: "Upload release artifacts in release/ to GitHub Release via gh CLI",
-		Command:     "./publish.sh",
-		Args:        []string{},
+		Command:     "./make.py",
+		Args:        []string{"publish"},
 	}
 }
 
 func explorerPublishTargets(isWin bool) []Target {
-	if isWin {
-		return []Target{
-			{
-				ID:          "publish",
-				Name:        "Publish Windows Setup to GitHub",
-				Description: "Upload Windows release artifacts to GitHub Release",
-				Command:     "./build-win.ps1",
-				Args:        []string{"-u"},
-			},
-		}
-	}
-	return []Target{
-		{
-			ID:          "publish",
-			Name:        "Publish GitHub Release",
-			Description: "Upload release artifacts to GitHub Release",
-			Command:     "./publish.sh",
-			Args:        []string{},
-		},
-	}
+	return []Target{defaultExplorerPublish(isWin)}
 }
 
 // LoadAndRefreshAll discovers and loads all components with up-to-date statuses.

@@ -6,29 +6,30 @@ This directory contains the GraphQL SDL schemas for MonsterMQ Core and Edge Brok
 
 - `main.gql`: GraphQL SDL schema exported from a running MonsterMQ Core.
 - `edge.gql`: GraphQL SDL schema exported from a running MonsterMQ Edge Broker.
-- `fetch-schemas.sh`: Shell script to fetch live GraphQL SDL schemas from running brokers.
-- `compare-schemas.sh`: Convenience launcher for the schema comparison program.
-- `build.sh`: Build script to compile the native or cross-compiled `compare-schemas` binary.
+- Helper commands in the repository root's `make.py` (Python 3.9+, any OS):
+  - `python make.py gql-fetch`: fetch live GraphQL SDL schemas from running brokers.
+  - `python make.py gql-compare`: run the schema comparison program.
+  - `python make.py build --gql`: compile the native or cross-compiled `compare-schemas` binary.
 - `main.go`: Standalone Go tool to parse, diff, and compare GraphQL schemas.
 
 ---
 
 ## Fetching Schemas from Running Brokers
 
-Use `fetch-schemas.sh` to update `main.gql` and `edge.gql` from running brokers:
+Use `python make.py gql-fetch` (from the repository root) to update `main.gql` and `edge.gql` from running brokers:
 
 ```bash
 # Fetch both Core (localhost:4000) and Edge (localhost:4001)
-./fetch-schemas.sh
+python make.py gql-fetch
 
 # Fetch only MonsterMQ Core
-./fetch-schemas.sh -m http://localhost:4000/graphql
+python make.py gql-fetch -m http://localhost:4000/graphql
 
 # Fetch only Edge Broker
-./fetch-schemas.sh -e http://localhost:4001/graphql
+python make.py gql-fetch -e http://localhost:4001/graphql
 
 # Fetch both and immediately compare differences
-./fetch-schemas.sh --compare
+python make.py gql-fetch --compare
 ```
 
 ---
@@ -44,8 +45,8 @@ The comparison tool parses both SDL files using `gqlparser` and compares:
 
 ```bash
 # Compare default schemas (main.gql vs edge.gql)
-./compare-schemas.sh
-# or
+python make.py gql-compare      # from the repository root
+# or, inside gql/
 go run .
 
 # Show summary and root operations only
@@ -72,20 +73,20 @@ go run . /path/to/schema1.gql /path/to/schema2.gql
 
 ## Building the Binary
 
-Use `build.sh` to compile the standalone binary into `bin/`:
+Use `python make.py build --gql` (from the repository root) to compile the standalone binary into `gql/bin/`:
 
 ```bash
-# Build native binary (bin/compare-schemas)
-./build.sh
+# Build native binary (gql/bin/compare-schemas, .exe on Windows)
+python make.py build --gql
 
 # Cross-compile for Linux, macOS, and Windows
-./build.sh --all
+python make.py build --gql --all
 
 # Clean build artifacts
-./build.sh --clean
+python make.py build --gql --clean
 ```
 
-When built, `./compare-schemas.sh` automatically uses `bin/compare-schemas` directly.
+When built, `python make.py gql-compare` automatically uses `gql/bin/compare-schemas` directly.
 
 ---
 

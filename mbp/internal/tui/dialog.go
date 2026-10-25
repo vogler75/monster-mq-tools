@@ -15,7 +15,6 @@ const (
 	DialogNone DialogType = iota
 	DialogBuildTarget
 	DialogPublishTarget
-	DialogPublishAllConfirm
 	DialogCleanConfirm
 	DialogDevVersionConfirm
 	DialogDevVersionAllConfirm
@@ -35,7 +34,7 @@ func RenderModal(d *DialogModel, width, height int) string {
 	if d.Type == DialogNone {
 		return ""
 	}
-	if d.Component == nil && d.Type != DialogHelp && d.Type != DialogPublishAllConfirm && d.Type != DialogDevVersionAllConfirm {
+	if d.Component == nil && d.Type != DialogHelp && d.Type != DialogDevVersionAllConfirm {
 		return ""
 	}
 
@@ -98,19 +97,6 @@ func RenderModal(d *DialogModel, width, height int) string {
 			content.WriteString(StyleDim.Render("[↑/↓] Select   [Enter] Confirm & Publish   [Esc] Cancel"))
 		}
 
-	case DialogPublishAllConfirm:
-		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorSecondary).Render("🚀  CONFIRM PUBLISH ALL CORE COMPONENTS"))
-		content.WriteString("\n")
-		content.WriteString(lipgloss.NewStyle().Foreground(ColorWarning).Render("⚠  WARNING: This will publish all core components sequentially!"))
-		content.WriteString("\n\n")
-		content.WriteString("Components to publish:\n")
-		for _, t := range d.Targets {
-			content.WriteString(fmt.Sprintf("  • %s\n", lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(t.Name)))
-		}
-		content.WriteString("\n")
-		content.WriteString(StyleDim.Render("(explorer, tools and tests are handled separately and excluded)\n\n"))
-		content.WriteString(StyleDim.Render("[Enter] Confirm & Publish All   [Esc] Cancel"))
-
 	case DialogCleanConfirm:
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorDanger).Render("🗑  CONFIRM CLEAN ARTIFACTS"))
 		content.WriteString("\n\n")
@@ -121,14 +107,14 @@ func RenderModal(d *DialogModel, width, height int) string {
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("🌱  PREPARE NEXT DEV VERSION"))
 		content.WriteString("\n\n")
 		content.WriteString(fmt.Sprintf("Advance %s (current: %s) to the next development version?\n", d.Component.Name, d.Component.Version))
-		content.WriteString(StyleDim.Render("Executes: ./release.sh --dev\n"))
+		content.WriteString(StyleDim.Render("Executes: make.py dev\n"))
 		content.WriteString(StyleDim.Render("Increments the patch version, appends -dev, commits and pushes to origin/main.\n\n"))
 		content.WriteString(StyleDim.Render("[Enter] Prepare Dev Version   [Esc] Cancel"))
 
 	case DialogDevVersionAllConfirm:
 		content.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("🌱  PREPARE NEXT DEV VERSION (ALL CORE COMPONENTS)"))
 		content.WriteString("\n\n")
-		content.WriteString("Advance all core components to the next development version (release.sh --dev)?\n")
+		content.WriteString("Advance all core components to the next development version (make.py dev)?\n")
 		content.WriteString("Components to advance:\n")
 		for _, t := range d.Targets {
 			content.WriteString(fmt.Sprintf("  • %s\n", lipgloss.NewStyle().Bold(true).Foreground(ColorWhite).Render(t.Name)))
@@ -150,8 +136,7 @@ func RenderModal(d *DialogModel, width, height int) string {
 			{"[u]", "Git pull latest updates for selected component"},
 			{"[U]", "Git pull latest updates for ALL components"},
 			{"[p]", "Publish selected component to GitHub / Docker"},
-			{"[P]", "Publish ALL core components sequentially (dashboard, main, edge)"},
-			{"[v] or [d]", "Prepare next development version (release.sh --dev)"},
+			{"[v] or [d]", "Prepare next development version (make.py dev)"},
 			{"[D]", "Prepare next dev version for ALL core components (dashboard, main, edge)"},
 			{"[c]", "Clean build outputs for selected component"},
 			{"[r]", "Refresh status without fetching remote"},

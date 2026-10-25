@@ -66,14 +66,14 @@ type Component struct {
 	Git             git.Status  `json:"git"`
 	Status          BuildStatus `json:"status"`
 
-	Separate        bool        `json:"separate,omitempty"` // true if handled separately (not included in batch build/publish all)
+	Separate        bool        `json:"separate,omitempty"` // true if handled separately (not included in batch build and dev-version runs)
 
 	LastBuildTime     time.Time     `json:"last_build_time,omitempty"`
 	LastBuildDuration time.Duration `json:"last_build_duration,omitempty"`
 	LastError         string        `json:"last_error,omitempty"`
 }
 
-// IsSeparate returns true if the component is handled separately and excluded from batch build/publish all.
+// IsSeparate returns true if the component is handled separately and excluded from batch build and dev-version runs.
 func (c *Component) IsSeparate() bool {
 	if c == nil {
 		return false
