@@ -173,6 +173,35 @@ func GetStandardRegistry(rootDir string) []*Component {
 			},
 		},
 		{
+			ID:          "explorer",
+			Name:        "MonsterMQ Explorer",
+			Description: "Electron desktop MQTT client & topic explorer (macOS & Windows)",
+			Directory:   filepath.Join(rootDir, "explorer"),
+			Separate:    true,
+			// version.txt carries the -dev version; package.json only follows release tags
+			VersionFiles: []string{
+				"version.txt",
+				"package.json",
+			},
+			DefaultBuild: defaultExplorerBuild(isWin),
+			BuildTargets: explorerBuildTargets(isWin),
+			DevVersionTarget: &Target{
+				ID:          "bump-dev",
+				Name:        "Prepare Dev Version",
+				Description: "Advance to next development version (make.py dev)",
+				Command:     makePy,
+				Args:        []string{"dev"},
+			},
+			DefaultPublish: defaultExplorerPublish(isWin),
+			PublishTargets: explorerPublishTargets(isWin),
+			ArtifactGlobs: []string{
+				"release/*.dmg",
+				"release/*.exe",
+				"release/*.zip",
+				"dist/index.html",
+			},
+		},
+		{
 			ID:          "main",
 			Name:        "MonsterMQ Core",
 			Description: "Core Enterprise MQTT Broker, Java distribution & Setup binaries",
@@ -380,35 +409,6 @@ func GetStandardRegistry(rootDir string) []*Component {
 			ArtifactGlobs: []string{
 				"bin/monstermq-edge*",
 				"bin/*.deb",
-			},
-		},
-		{
-			ID:          "explorer",
-			Name:        "MonsterMQ Explorer",
-			Description: "Electron desktop MQTT client & topic explorer (macOS & Windows)",
-			Directory:   filepath.Join(rootDir, "explorer"),
-			Separate:    true,
-			// version.txt carries the -dev version; package.json only follows release tags
-			VersionFiles: []string{
-				"version.txt",
-				"package.json",
-			},
-			DefaultBuild: defaultExplorerBuild(isWin),
-			BuildTargets: explorerBuildTargets(isWin),
-			DevVersionTarget: &Target{
-				ID:          "bump-dev",
-				Name:        "Prepare Dev Version",
-				Description: "Advance to next development version (make.py dev)",
-				Command:     makePy,
-				Args:        []string{"dev"},
-			},
-			DefaultPublish: defaultExplorerPublish(isWin),
-			PublishTargets: explorerPublishTargets(isWin),
-			ArtifactGlobs: []string{
-				"release/*.dmg",
-				"release/*.exe",
-				"release/*.zip",
-				"dist/index.html",
 			},
 		},
 		{
