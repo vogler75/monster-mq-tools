@@ -727,7 +727,7 @@ func (m *AppModel) resizeLayout() {
 	if !m.FullscreenLog {
 		sepCount := 0
 		for i := 1; i < len(m.Components); i++ {
-			if m.Components[i-1].ID == "dashboard" || m.Components[i].ID == "explorer" {
+			if m.Components[i-1].ID == "dashboard" || m.Components[i].ID == "tools" {
 				sepCount++
 			}
 		}

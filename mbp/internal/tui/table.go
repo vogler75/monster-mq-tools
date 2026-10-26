@@ -46,8 +46,8 @@ func RenderComponentTable(comps []*component.Component, selectedIdx int, width i
 	sb.WriteString("\n")
 
 	for i, c := range comps {
-		// Separators between dashboard and then before explorer
-		if i > 0 && (comps[i-1].ID == "dashboard" || c.ID == "explorer") {
+		// Separators after dashboard and before tools (main, edge, explorer have GitHub pipelines)
+		if i > 0 && (comps[i-1].ID == "dashboard" || c.ID == "tools") {
 			sb.WriteString(StyleDim.Render(strings.Repeat("─", availWidth)))
 			sb.WriteString("\n")
 		}

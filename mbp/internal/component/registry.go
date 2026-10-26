@@ -388,9 +388,10 @@ func GetStandardRegistry(rootDir string) []*Component {
 			Description: "Electron desktop MQTT client & topic explorer (macOS & Windows)",
 			Directory:   filepath.Join(rootDir, "explorer"),
 			Separate:    true,
+			// version.txt carries the -dev version; package.json only follows release tags
 			VersionFiles: []string{
-				"package.json",
 				"version.txt",
+				"package.json",
 			},
 			DefaultBuild: defaultExplorerBuild(isWin),
 			BuildTargets: explorerBuildTargets(isWin),

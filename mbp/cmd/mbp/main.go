@@ -138,7 +138,7 @@ func runStatusCmd(args []string) {
 	fmt.Println(strings.Repeat("─", 86))
 
 	for i, c := range comps {
-		if i > 0 && (comps[i-1].ID == "dashboard" || c.ID == "explorer") {
+		if i > 0 && (comps[i-1].ID == "dashboard" || c.ID == "tools") {
 			fmt.Println(strings.Repeat("─", 86))
 		}
 		gitStr := "no git"
