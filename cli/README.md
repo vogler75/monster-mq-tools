@@ -100,14 +100,18 @@ go build -o bin/mmq .
 | `--port` | - | `MQ_PORT`, `GRAPHQL_PORT` | `4000` | Broker port number (GraphQL/HTTP) |
 | `--mqtt-host` | - | `MQ_MQTT_HOST`, `MQTT_HOST` | (derived from `--host`) | MQTT broker host / IP address |
 | `--mqtt-port` | - | `MQ_MQTT_PORT`, `MQTT_PORT` | `1883` (or auto-discovered) | MQTT broker port number |
+| `--mqtt-user` | - | `MQ_MQTT_USER`, `MQTT_USER` | (CLI auth user) | MQTT username (e.g. for `hmi sync`) |
+| `--mqtt-pass` | - | `MQ_MQTT_PASS`, `MQTT_PASS` | (CLI auth pass) | MQTT password |
 | `--https` | - | `MQ_HTTPS`, `GRAPHQL_HTTPS` | `false` | Use HTTPS protocol instead of HTTP |
-| `--user` | `--username` | `MQ_USER`, `GRAPHQL_USER` | - | Username for authentication |
-| `--pass` | `--password` | `MQ_PASS`, `GRAPHQL_PASS` | - | Password for authentication |
+| `--user` | `-u`, `--username` | `MQ_USER`, `GRAPHQL_USER` | - | Username for authentication |
+| `--pass` | `-p`, `--password` | `MQ_PASS`, `GRAPHQL_PASS` | - | Password for authentication |
 | `--token` | - | `MQ_TOKEN`, `GRAPHQL_TOKEN` | - | JWT Bearer token (bypasses login) |
 | `--env` | `--env-file` | - | `.env` | Path to custom `.env` file |
 | `--json` | - | - | `false` | Output results in raw formatted JSON |
 | `-i` | `--interactive` | - | - | Launch interactive REPL CLI session |
 | `--help` | `-h` | - | - | Show CLI usage overview |
+
+Global options must be placed **before** the command (e.g. `mmq --json --port 4001 sessions`). Every command also accepts `-h` / `--help` for its own usage text.
 
 ### Environment Variables & `.env` File
 
@@ -165,9 +169,11 @@ mmq [localhost:4000]>
 | `token <jwt>` | Set or update JWT Bearer token | `token eyJhbGciOi...` |
 | `status` | Display connection health, auth state, and features | `status` |
 | `json [on\|off]` | Toggle or inspect JSON output mode | `json on` |
-| `clear` | Clear terminal screen | `clear` |
-| `help [cmd]` | Display interactive help menu | `help` |
-| `exit` / `quit` | Exit the interactive session | `exit` |
+| `clear` / `cls` | Clear terminal screen | `clear` |
+| `help [cmd]` / `?` | Display interactive help menu | `help` |
+| `exit` / `quit` / `q` | Exit the interactive session (or `Ctrl+D`) | `exit` |
+
+Any other input is executed as a regular `mmq` command, e.g. `searchTopics "sensors/#"`.
 
 ---
 
@@ -188,7 +194,7 @@ mmq [localhost:4000]>
 Fetch the current or retained payload and metadata for a specific topic.
 
 ```bash
-mmq currentValue <topic> [--archive-group GroupName]
+mmq currentValue <topic> [archiveGroup] [--archive-group|--group|-g GroupName]
 ```
 
 *Example:*
@@ -200,7 +206,7 @@ mmq --port 4001 currentValue sensors/temp/room1
 Publish a message payload to a topic with optional retain and QoS flags. If payload is omitted, an empty message (`""`) is published (useful for clearing retained topics or triggering events).
 
 ```bash
-mmq publish <topic> [payload] [--retain] [--qos 0|1|2]
+mmq publish <topic> [payload] [--retain|-r] [--qos 0|1|2]
 ```
 
 *Examples:*
@@ -218,6 +224,12 @@ Subscribe to real-time topic updates via WebSocket (`graphql-transport-ws`). Aut
 ```bash
 mmq subscribe <topic1> [topic2...] [options]
 ```
+
+*Options:*
+- `--ws-url`, `-w <url>`: Custom WebSocket endpoint (default: derived from broker URL)
+- `--format`, `-f <format>`: Requested payload format: `JSON`, `TEXT`, `BINARY` (default: `JSON`)
+- `--raw`: Do not decode base64 string payloads
+- `--monitor`, `-m`: Launch the interactive full-screen `monitor` table instead of streaming
 
 *Examples:*
 ```bash
@@ -243,43 +255,48 @@ mmq monitor [topic-filters...]
 - `s`: Cycle sort order (Alphabetical -> Timestamp -> Update Count)
 - `p`: Pause/Resume live updates
 - `c`: Clear tracked topics
-- `q` / `Ctrl+C`: Exit monitor and restore terminal
+- `q` / `Esc` / `Ctrl+C`: Exit monitor and restore terminal
+
+`monitor` accepts the same `--ws-url`, `--format` and `--raw` options as `subscribe` and defaults to `#` when no filter is given. When stdin is not a terminal it falls back to streaming output.
 
 #### `searchTopics`
 Search active topics matching a pattern or wildcard across both the persistent archive store and live retained message store. Automatically handles glob patterns (`*Watt*`), SQL LIKE syntax (`%Watt%`), and MQTT topic filters (`sensors/#`).
 
 ```bash
-mmq searchTopics [pattern] [--limit N] [--archive-group GroupName]
+mmq searchTopics [pattern] [--limit|-l N] [--archive-group|-g GroupName]
+# pattern defaults to '#', limit to 100
 ```
 
 #### `currentValues`
 Fetch current topic values matching an MQTT topic filter pattern.
 
 ```bash
-mmq currentValues <topic-filter> [--limit N] [--archive-group Default]
+mmq currentValues <topic-filter> [--limit|-l N] [--archive-group|-g Default]
 ```
 
 #### `retainedMessages`
 List all retained messages matching a topic filter pattern.
 
 ```bash
-mmq retainedMessages [topic-filter] [--limit N]
+mmq retainedMessages [topic-filter] [--limit|-l N]
+# filter defaults to '#', limit to 100
 ```
 
 #### `browseTopics`
 Hierarchically browse topic levels.
 
 ```bash
-mmq browseTopics [path] [--archive-group GroupName]
+mmq browseTopics [path] [--archive-group|-g GroupName]
+# path defaults to '+'
 ```
 
 #### `sessions` / `session`
 Manage connected MQTT client sessions.
 
 ```bash
-mmq sessions
-mmq session inspect <clientId>
-mmq session remove <clientId...>
+mmq sessions                       # or: mmq session list
+mmq session <clientId>             # or: mmq session inspect <clientId>
+mmq session remove <clientId...>   # remove / disconnect one or more sessions
 ```
 
 #### `systemLogs`
@@ -287,6 +304,7 @@ View broker system logs.
 
 ```bash
 mmq systemLogs [--last-minutes N] [--limit N]
+# defaults: last 60 minutes, 50 entries
 ```
 
 #### `hmis`
@@ -311,7 +329,7 @@ mmq archiveGroups
 Display min timestamps and daily message counts for an archive group.
 
 ```bash
-mmq archiveStats <group> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N]
+mmq archiveStats <group> [--start ISO_TIME] [--end ISO_TIME] [--last-seconds|-s N]
 ```
 
 *Example:*
@@ -323,7 +341,7 @@ mmq archiveStats Default --last-seconds 86400
 Query historical messages matching topic filters over a time range. If no time range or `--last-seconds` is specified, defaults to the last 60 seconds. The archive group can be passed as a second positional argument or via `--archive-group` (default: `Default`).
 
 ```bash
-mmq archivedMessages <topic> [archiveGroup] [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N] [--limit N] [--archive-group GroupName]
+mmq archivedMessages <topic> [archiveGroup] [--start ISO_TIME] [--end ISO_TIME] [--last-seconds|-s N] [--limit|-l N] [--archive-group|--group|-g GroupName]
 ```
 
 *Examples:*
@@ -350,8 +368,9 @@ mmq aggregatedMessages <topics...> \
   [--interval ONE_MINUTE|FIVE_MINUTES|FIFTEEN_MINUTES|ONE_HOUR|ONE_DAY] \
   [--functions AVG,MIN,MAX,COUNT] \
   [--fields field1,field2] \
-  [--start ISO_TIME] [--end ISO_TIME] [--last-seconds N] \
-  [--archive-group GroupName]
+  [--start ISO_TIME] [--end ISO_TIME] [--last-seconds|-s N] \
+  [--archive-group|-g GroupName]
+# defaults: --interval ONE_MINUTE, --functions AVG
 ```
 
 *Example:*
@@ -495,10 +514,10 @@ mmq currentUser
 ```
 
 #### `databaseConnections`
-List configured database connections.
+List configured database connections, optionally filtered by type (`POSTGRES`, `MONGODB`, `SQLITE`).
 
 ```bash
-mmq databaseConnections
+mmq databaseConnections [type]
 ```
 
 #### `hmis` / `hmi list`
@@ -506,21 +525,32 @@ List deployed HMI web dashboards with names, paths, and status.
 
 ```bash
 mmq hmis
-# or: mmq hmi list
+# or: mmq hmi list / mmq hmi ls
 ```
 
 #### `hmi create`
 Create a new HMI web dashboard definition.
 
 ```bash
-mmq hmi create <name> [--path /path] [--title "Title"] [--main]
+mmq hmi create <name> [options]
+# Aliases: mmq hmi new, mmq hmi add
 ```
+
+*Options:*
+- `--path <urlPath>`: URL path (default: `/<name>`)
+- `--title <title>`: Display title (default: `<name>`)
+- `--description <desc>`: Description of the dashboard
+- `--entry-point <file>`: HTML entrypoint filename (default: `index.html`)
+- `--main`, `-m`: Designate as the primary/default dashboard
+- `--node <nodeId>`: Target cluster node ID
+- `--disabled`: Create in disabled state (default: enabled)
 
 #### `hmi remove`
 Delete and remove one or more deployed HMI dashboards.
 
 ```bash
 mmq hmi remove <name1> [name2...]
+# Aliases: mmq hmi delete, mmq hmi rm
 ```
 
 #### `exportHmiZip` / `hmi export` / `hmi download`
@@ -528,7 +558,7 @@ Export deployed HMI package as a binary zip file or extract directly into a targ
 
 ```bash
 mmq exportHmiZip <dashboard-name> [output-file.zip]
-mmq exportHmiZip <dashboard-name> [target-directory] --unzip
+mmq exportHmiZip <dashboard-name> [target-directory] --unzip   # or -u
 # Aliases: mmq hmi export, mmq hmi download, mmq downloadHmiZip
 ```
 
@@ -547,7 +577,8 @@ mmq exportHmiZip FactoryOverview ./src/hmi --unzip
 Upload and deploy an HMI web dashboard from a binary zip file or local directory (automatically zipped on upload). When uploading a directory, `.git` directory and metadata are automatically excluded.
 
 ```bash
-mmq importHmiZip <file.zip|directory> [dashboard-name] [--main]
+mmq importHmiZip <file.zip|directory> [dashboard-name] [--main|-m]
+mmq importHmiZip <dashboard-name> <file.zip|directory> [--main|-m]
 # Aliases: mmq hmi import, mmq hmi upload, mmq uploadHmiZip
 ```
 
@@ -567,7 +598,8 @@ Live bidirectional file synchronization between local workstation and remote bro
 
 ```bash
 mmq hmi sync <dashboard-name> [local-dir] [options]
-# Alias: mmq sync <dashboard-name> [local-dir]
+# Aliases: mmq hmi watch, mmq sync, mmq hmiSync
+# local-dir defaults to ./<dashboard-name>
 ```
 
 *Options:*
@@ -576,6 +608,10 @@ mmq hmi sync <dashboard-name> [local-dir] [options]
 - `--push-only`: Upload all local files from local directory to remote broker once and exit
 - `--mqtt-host <host>`: MQTT broker host (defaults to host from GraphQL endpoint)
 - `--mqtt-port <port>`: MQTT broker port (default: 1883 or 8883 for TLS)
+- `--mqtt-user <username>`: MQTT username (default: CLI auth user)
+- `--mqtt-pass <password>`: MQTT password (default: CLI auth pass)
+- `--base-topic <topic>`: Base topic prefix (default: `monstermq/hmi/sync`)
+- `--dry-run`: Log actions without transmitting MQTT packets
 - `--debounce <ms>`: Debounce delay in ms for file write events (default: `100`)
 - `--ignore <patterns>`: Comma-separated ignore patterns (default: `.git,node_modules,*.tmp`)
 
@@ -652,9 +688,28 @@ mmq script list
 
 # Get script details, configuration, code, and recent execution logs
 mmq script get TemperatureMonitor
+
+# List supported scripting languages on the connected broker
+mmq script languages
 ```
 
+*Subcommand aliases:* `list`/`ls`, `get`/`inspect`/`show`, `create`/`new`/`add`, `update`/`edit`, `delete`/`rm`/`remove`, `test`/`run`/`dry-run`, `logs`/`log`, `docs`/`doc`, `skill`/`skills`, `languages`/`langs`; `enable`/`start` and `disable`/`stop` are shortcuts for `toggle`.
+
 ### 2. Create & Update
+
+*Options for `create` / `update`:*
+- `--lang <lang>`: Script language (`starlark`, `python`, `javascript`)
+- `--trigger <type>`: `TOPIC`, `TIMER`, `BOTH`, `CALLABLE` (default: `TOPIC`)
+- `--topic <filter>`: Topic filter (repeatable or comma-separated)
+- `--interval <ms>`: Timer interval for `TIMER` / `BOTH`
+- `--on-change`: Trigger only on payload change (skip duplicate consecutive payloads)
+- `--mode <mode>`: `SINGLETON` (default) or `MULTI_INSTANCE`
+- `--timeout <ms>`: Execution timeout (default: `200`)
+- `--code <code>` / `--file <path>`: Inline script code or local source file
+- `--desc <description>`: Description of the script
+- `create` only: `--node <nodeId>` (default: local or `*`), `--namespace <ns>` (default: `script`), `--disabled`
+- `update` only: `--no-on-change` to clear the on-change flag
+
 ```bash
 # Deploy a new script from inline code
 mmq script create TemperatureMonitor \
@@ -718,6 +773,9 @@ mmq script skill -o ./SKILL.md
 
 # Install directly to Antigravity skills directory (~/.gemini/antigravity/skills/monstermq-scripts/SKILL.md)
 mmq script skill --install
+
+# Install into a custom skills directory (writes <dir>/SKILL.md)
+mmq script skill --install ./.agents/skills/monstermq-scripts
 ```
 
 ---

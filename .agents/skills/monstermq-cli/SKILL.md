@@ -14,9 +14,10 @@ This skill provides operational instructions and command references for using `m
 - **Binary Location**: `cli/bin/mmq` / `cli/bin/mmq.exe` (built via `python make.py build --cli` from the tools repo root, or `cd cli && go build -o bin/mmq .`)
 - **Default Endpoint**: `http://localhost:4000/graphql`
 - **Configuration Sources**:
-  - CLI flags: `--url`, `--host`, `--port`, `--mqtt-host`, `--mqtt-port`, `--https`, `--user`, `--pass`, `--token`, `-i`
-  - Environment variables: `MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_MQTT_PORT`, `MQTT_PORT`, `MQ_MQTT_HOST`, `MQTT_HOST`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN` (or `GRAPHQL_*` equivalents)
-  - `.env` files
+  - CLI flags (must come **before** the command): `--url`, `--host`, `--port`, `--https`, `--user`/`--username`/`-u`, `--pass`/`--password`/`-p`, `--token`, `--mqtt-host`, `--mqtt-port`, `--mqtt-user`, `--mqtt-pass` (MQTT credentials default to the CLI auth user/pass), `--env`/`--env-file <file>` (default `.env`), `--json`, `-i`/`--interactive`, `-h`/`--help`
+  - Environment variables: `MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN` (or `GRAPHQL_*` equivalents); `MQ_MQTT_HOST`/`MQTT_HOST`, `MQ_MQTT_PORT`/`MQTT_PORT`, `MQ_MQTT_USER`/`MQTT_USER`, `MQ_MQTT_PASS`/`MQTT_PASS`
+  - `.env` files (values only apply when the variable is not already set in the environment)
+  - Every command supports `-h`/`--help` for its own usage text.
 
 ---
 
@@ -33,7 +34,7 @@ mmq --port 4001
 mmq --host 192.168.1.50 --port 4001
 mmq --host secure-broker --https
 
-# Or explicitly with shell subcommand:
+# Or explicitly with shell subcommand (aliases: repl, interactive, sh) or -i:
 mmq shell
 mmq --url http://192.168.1.50:4000/graphql shell
 ```
@@ -45,9 +46,10 @@ When inside the interactive prompt (`mmq [host]>`):
 - **`token <jwt>`**: Set or update JWT token.
 - **`status`**: Inspect broker connection health, authentication state (`username`, `isAdmin`), and enabled features.
 - **`json [on|off]`**: Toggle or inspect JSON output mode on the fly.
-- **`clear`**: Clear the terminal screen.
-- **`help [command]`**: Display REPL interactive help menu.
-- **`exit`** / **`quit`** (or `Ctrl+D`): Exit the interactive shell.
+- **`clear`** / **`cls`**: Clear the terminal screen.
+- **`help [command]`** / **`?`**: Display REPL interactive help menu.
+- **`exit`** / **`quit`** / **`q`** (or `Ctrl+D`): Exit the interactive shell.
+- Any other input is executed as a regular `mmq` command (e.g. `searchTopics "sensors/#"`).
 
 ---
 
@@ -69,41 +71,56 @@ mmq --port 4001 features
 
 ### 1:1 GraphQL Commands
 `mmq` maps 1:1 to MonsterMQ GraphQL functions (executable either as single CLI commands or inside the interactive shell):
-- **`searchTopics [pattern]`**: Search active topics (globs `*`, SQL `%`, MQTT `#`)
-- **`currentValue <topic>`**: Get current or retained value for a single topic
-- **`currentValues <filter>`**: Get current values matching a topic filter
-- **`retainedMessages [filter]`**: List retained messages matching a topic filter
-- **`browseTopics [path]`**: Browse topic hierarchy level-by-level
-- **`publish <topic> [payload]`**: Publish message payload (`--retain`, `--qos 0|1|2`, defaults to empty `""` if omitted)
-- **`subscribe <topics...>`**: Subscribe to real-time topic updates via WebSocket (`--ws-url`, `--format`, `--raw`)
-- **`monitor <topics...>`**: Interactive live dashboard table to view incoming topic values in-place with scrolling
-- **`archivedMessages <topic> [archiveGroup]`**: Query historical time-series messages (defaults to last 60s window)
-- **`aggregatedMessages <topics...>`**: Query server-side time-series aggregations (`AVG`, `MIN`, `MAX`)
+**Topics & values**
+- **`searchTopics [pattern]`**: Search active topics (globs `*`, SQL `%`, MQTT `#`; default `#`). Options: `--limit N`/`-l` (default 100), `--archive-group`/`-g` (default `Default`)
+- **`currentValue <topic> [archiveGroup]`**: Get current or retained value for a single topic (`--archive-group`/`--group`/`-g`)
+- **`currentValues <filter>`**: Get current values matching a topic filter (`--limit`/`-l`, default 100; `--archive-group`/`-g`)
+- **`retainedMessages [filter]`**: List retained messages matching a topic filter (default `#`; `--limit`/`-l`, default 100)
+- **`browseTopics [path]`**: Browse topic hierarchy level-by-level (default `+`; `--archive-group`/`-g`)
+- **`publish <topic> [payload]`**: Publish message payload (`--retain`/`-r`, `--qos 0|1|2`; payload defaults to empty `""`, useful for clearing retained topics)
+
+**Real-time**
+- **`subscribe <topics...>`**: Stream real-time topic updates via GraphQL WebSocket. Options: `--ws-url`/`-w <url>`, `--format`/`-f JSON|TEXT|BINARY` (default JSON), `--raw` (don't decode base64 payloads), `--monitor`/`-m` (switch to the live table below)
+- **`monitor [topics...]`**: Interactive full-screen live table of topic values (default filter `#`; same `--ws-url`/`--format`/`--raw` options). Keys: `q`/`Esc`/Ctrl+C quit, `p` pause, `c` clear, `s` cycle sort (name → time → count), arrows or `k`/`j` and PgUp/PgDn scroll, `g`/`G` or Home/End top/bottom. Falls back to streaming output when stdin is not a TTY — for agents/scripts prefer `subscribe`.
+
+**Archives (Full Broker)**
+- **`archivedMessages <topic> [archiveGroup]`**: Query historical messages (default last 60s, `Default` group). Options: `--start`/`--end ISO_TIME` (ISO 8601 UTC), `--last-seconds`/`-s N`, `--limit`/`-l N` (default 100), `--archive-group`/`--group`/`-g`
+- **`aggregatedMessages <topics...>`**: Server-side time-series aggregations. Options: `--interval ONE_MINUTE|FIVE_MINUTES|FIFTEEN_MINUTES|ONE_HOUR|ONE_DAY` (default ONE_MINUTE), `--functions AVG,MIN,MAX,COUNT` (default AVG), `--fields f1,f2` (JSON fields), `--start`/`--end`, `--last-seconds`/`-s`, `--archive-group`/`-g`
 - **`archiveGroups`**: List all deployed archive storage groups
-- **`archiveStats <group>`**: Get stats for an archive group
-- **`systemLogs`**: View broker system log entries (`--last-minutes N`)
-- **`sessions`**: List active MQTT client sessions
-- **`session <clientId>`**: Inspect specific client session details
+- **`archiveStats <group>`**: Min timestamps and daily message counts for an archive group (`--start`, `--end`, `--last-seconds`/`-s`)
+
+**Broker, sessions & users**
+- **`brokerConfig`** / **`features`**: List enabled broker features & capabilities
+- **`systemLogs`**: View broker system log entries (`--last-minutes N`, default 60; `--limit N`, default 50)
+- **`sessions`** / **`session list`**: List active MQTT client sessions
+- **`session <clientId>`** / **`session inspect <clientId>`**: Inspect specific client session details and subscriptions
+- **`session remove <clientId...>`**: Remove / disconnect one or more client sessions
 - **`currentUser`**: Get authenticated user and admin status
-- **`databaseConnections`**: List configured database connections
-- **`hmis` / `hmi list`**: List deployed HMI web dashboards
-- **`hmi create <name> [options]`**: Create a new HMI dashboard definition
-- **`hmi remove <name...>`**: Delete and remove one or more deployed HMI dashboards
-- **`exportHmiZip <name> [out] [--unzip]`** (or `hmi export`, `hmi download`, `downloadHmiZip`): Export deployed HMI package to binary zip file or extract to folder
-- **`importHmiZip <file.zip|dir> [name] [--main]`** (or `hmi import`, `hmi upload`, `uploadHmiZip`): Upload & deploy HMI dashboard from a zip package or local directory (`.git` directory and metadata are automatically excluded when uploading folders)
-- **`hmi sync <name> [localDir]`** (or `sync <name>`): Live bidirectional file synchronization between local directory and broker's HMI storage over MQTT. Supports `--pull` (clone remote files before watching), `--pull-only` (single-shot download), `--push-only` (single-shot upload), `--debounce <ms>`, `--ignore <patterns>`, and cross-platform recursive watching on Windows, macOS, and Linux.
-- **`scripts` / `script list [filter]`**: List all configured broker scripts with execution metrics, triggers, and state
-- **`script get <name>`**: Inspect full script configuration, bindings, source code, and circular execution logs
-- **`script create <name> [options]`**: Create and deploy a new script (`--lang`, `--trigger`, `--topic`, `--interval`, `--code`, `--file`, etc.)
-- **`script update <name> [options]`**: Update existing script code, trigger parameters, or options
-- **`script delete <name...>`**: Delete one or more scripts from the broker
-- **`script toggle <name> <on|off>`** (or `start`, `stop`, `enable`, `disable`): Toggle script execution state
-- **`script test <name|--code <code>> [options]`**: Dry-run execute script in a sandbox with mock `--topic`, `--payload`, and `--args`
-- **`script logs <name>`**: Inspect recent circular execution log entries and errors
-- **`script docs [language]`**: Fetch authoritative Markdown API reference directly from the connected broker
-- **`script skill [language] [--output file] [--install]`**: Retrieve ready-to-use AI Skill specification or install it directly into `~/.gemini/antigravity/skills/`
-- **`script languages`**: Discover supported scripting languages on the connected broker (Starlark on Edge; Python 3 & JavaScript on Main)
-- **`brokerConfig`**: List enabled broker features & capabilities
+- **`databaseConnections [type]`**: List configured database connections, optionally filtered by type (`POSTGRES`, `MONGODB`, `SQLITE`)
+
+**HMI dashboards** (see also the `monstermq-hmi-builder` skill)
+- **`hmis` / `hmi list`** (or `hmi ls`): List deployed HMI web dashboards
+- **`hmi create <name> [options]`** (or `new`, `add`): Create a new HMI dashboard definition. Options: `--path <urlPath>` (default `/<name>`), `--title`, `--description`, `--entry-point <file>` (default `index.html`), `--main`/`-m` (primary dashboard), `--node <nodeId>`, `--disabled`
+- **`hmi remove <name...>`** (or `delete`, `rm`): Delete one or more deployed HMI dashboards
+- **`exportHmiZip <name> [out] [--unzip|-u]`** (or `hmi export`, `hmi download`, `downloadHmiZip`): Export deployed HMI package to a zip file (default `<name>.zip`) or extract to a folder
+- **`importHmiZip <file.zip|dir> [name] [--main|-m]`** (or `hmi import`, `hmi upload`, `uploadHmiZip`): Upload & deploy an HMI dashboard from a zip package or local directory (`.git` and metadata are excluded when uploading folders). Name defaults to the zip/folder name; `importHmiZip <name> <file.zip|dir>` order is also accepted.
+- **`hmi sync <name> [localDir]`** (or `hmi watch`, `sync`, `hmiSync`): Live file synchronization between a local directory (default `./<name>`) and the broker's HMI storage over MQTT, with cross-platform recursive watching. Options: `--pull` (pull remote files before watching), `--pull-only` (one-shot download), `--push-only` (one-shot upload), `--dry-run` (log only, no MQTT packets), `--debounce <ms>` (default 100), `--ignore <patterns>` (default `.git,node_modules,*.tmp`), `--base-topic <topic>` (default `monstermq/hmi/sync`), `--mqtt-host`, `--mqtt-port` (default 1883, 8883 for TLS), `--mqtt-user`, `--mqtt-pass`
+
+**Scripts** (details in the section below)
+- **`scripts` / `script list [filter]`** (or `ls`): List configured broker scripts with execution metrics, triggers, and state
+- **`script get <name>`** (or `inspect`, `show`): Inspect full script configuration, bindings, source code, and circular execution logs
+- **`script create <name> [options]`** (or `new`, `add`): Create and deploy a new script
+- **`script update <name> [options]`** (or `edit`): Update existing script code, trigger parameters, or options
+- **`script delete <name...>`** (or `rm`, `remove`): Delete one or more scripts
+- **`script toggle <name> <on|off|true|false>`**, **`script enable|start <name>`**, **`script disable|stop <name>`**: Toggle script execution state
+- **`script test <name|--code <code>> [options]`** (or `run`, `dry-run`): Dry-run a script in a sandbox with mock `--topic`, `--payload`, and `--args`
+- **`script logs <name>`** (or `log`): Inspect recent circular execution log entries and errors
+- **`script docs [language]`** (or `doc`): Fetch the authoritative Markdown API reference from the connected broker
+- **`script skill [language] [--output|-o file] [--install [dir]]`** (or `skills`): Retrieve the broker's AI Skill; `--install` writes `SKILL.md` to `[dir]` or `~/.gemini/antigravity/skills/monstermq-scripts/` (fallback `./.agents/skills/monstermq-scripts/` if no home dir)
+- **`script languages`** (or `langs`): Discover supported scripting languages (Starlark on Edge; Python 3 & JavaScript on Main)
+
+**Devices**
+- **`device <command>`**: Device/connector configuration (see next section)
 
 ### Device Configuration for AI Workflows
 
@@ -119,6 +136,11 @@ Use dedicated device APIs for configuration; import/export is a separate backup 
 Supported adapters (when exposed by the broker): MQTT, OPC UA, Kafka, WinCC OA, WinCC Unified, PLC4X, NATS, Redis, Neo4j, Telegram, i3X clients; OPC UA/Kafka servers; JDBC/InfluxDB/TimeBase loggers; Sparkplug B decoders. Type aliases ignore case, hyphens and underscores. HMI commands remain separate. The CLI cannot add a missing protocol implementation or change broker YAML/listener settings through device commands.
 
 Commands:
+- `device types`: discover supported device types, API operations and enabled broker features.
+- `device schema <type> [operation]`: describe mutation arguments and nested input/enum types.
+- `device template <type>`: generate an editable `{type,input}` JSON document.
+- `device validate <file|->`: validate an apply document against the connected broker.
+- `device apply <file|-> [--dry-run] [--wait] [--timeout 30s]`: merge supplied fields and create/update a device.
 - `device list [type] [--type <type>]`: list/filter device configurations.
 - `device get <name>`: read configuration with password/secret/token/private-key fields redacted.
 - `device enable|disable <name> [--wait] [--timeout 30s]`: use native toggle, never import.
@@ -174,6 +196,19 @@ mmq script languages
 ```
 
 #### 2. Authoring, Deploying & Modifying
+`create` / `update` options:
+- `--lang <lang>`: `starlark`, `python`, `javascript` (check `script languages`)
+- `--trigger TOPIC|TIMER|BOTH|CALLABLE` (default `TOPIC`)
+- `--topic <filter>`: topic filter (repeatable or comma-separated)
+- `--interval <ms>`: timer interval for `TIMER`/`BOTH`
+- `--on-change`: trigger only when the payload changes (skip duplicate consecutive payloads)
+- `--mode SINGLETON|MULTI_INSTANCE` (default `SINGLETON`)
+- `--timeout <ms>`: execution timeout (default 200)
+- `--code <code>` or `--file <path>`: script source
+- `--desc <description>`
+- `create` only: `--node <nodeId>` (default local or `*`), `--namespace <ns>` (default `script`), `--disabled`
+- `update` only: `--no-on-change` (clear the on-change flag); use `script toggle` to enable/disable
+
 Scripts can be deployed directly from an inline code string or from a local source file:
 ```bash
 # Deploy a new script from inline code

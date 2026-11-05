@@ -73,12 +73,21 @@ mmq [localhost:4000]> exit
 # Manage and list configured devices/subsystems
 ./bin/mmq device list
 
+# List and remove MQTT client sessions
+./bin/mmq sessions
+./bin/mmq session remove stale-client-1
+
+# Live-sync a local HMI folder with the broker over MQTT
+./bin/mmq --host 192.168.1.50 --mqtt-user admin --mqtt-pass secret hmi sync main ./my-hmi --pull
+
 # Manage broker scripts, dry-run test sandbox, and fetch AI skills
 ./bin/mmq script list
 ./bin/mmq script test MyScript --topic "sensors/temp" --payload '{"temp": 85}'
 ./bin/mmq script docs
 ./bin/mmq script skill --install
 ```
+
+Connection settings can also come from environment variables or a `.env` file (`MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN`, plus `MQ_MQTT_HOST`, `MQ_MQTT_PORT`, `MQ_MQTT_USER`, `MQ_MQTT_PASS` for MQTT-based commands). Global flags must come before the command, e.g. `./bin/mmq --json --port 4001 sessions`.
 
 For full CLI documentation, global flags, environment configuration, and detailed command syntax, see [`cli/README.md`](cli/README.md).
 
