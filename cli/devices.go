@@ -302,6 +302,7 @@ func runDevice(ctx context.Context, c *Client, args []string) (err error) {
 	defer func() {
 		if err != nil && c.cfg.JSONMode {
 			_ = printJSON(map[string]any{"success": false, "error": err.Error()})
+			jsonErrorPrinted = true
 		}
 	}()
 	if hasHelpFlag(args) || (len(args) > 0 && args[0] == "help") {

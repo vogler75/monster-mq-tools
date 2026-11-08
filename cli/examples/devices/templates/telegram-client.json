@@ -1,0 +1,12 @@
+{
+  "input": {
+    "config": {
+      "botToken": ""
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "Telegram-Client"
+}

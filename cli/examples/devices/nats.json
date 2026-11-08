@@ -1,0 +1,14 @@
+{
+  "type": "NATS-Client",
+  "input": {
+    "name": "nats-example",
+    "namespace": "external/nats",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "servers": ["nats://localhost:4222"],
+      "connectTimeoutMs": 5000,
+      "reconnectDelayMs": 5000
+    }
+  }
+}

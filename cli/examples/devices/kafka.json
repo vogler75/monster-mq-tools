@@ -1,0 +1,15 @@
+{
+  "type": "KAFKA-Client",
+  "input": {
+    "name": "kafka-example",
+    "namespace": "external/kafka",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "bootstrapServers": "localhost:9092",
+      "groupId": "monstermq-example",
+      "payloadFormat": "DEFAULT",
+      "destinationTopicPrefix": "kafka"
+    }
+  }
+}

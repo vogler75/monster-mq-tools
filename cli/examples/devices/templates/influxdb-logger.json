@@ -1,0 +1,16 @@
+{
+  "input": {
+    "config": {
+      "authType": "",
+      "endpointUrl": "",
+      "influxTags": [],
+      "jsonSchema": {},
+      "topicFilters": []
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "InfluxDB-Logger"
+}

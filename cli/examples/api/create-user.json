@@ -1,0 +1,8 @@
+{
+  "username": "operator1",
+  "password": "change-me-123",
+  "enabled": true,
+  "canSubscribe": true,
+  "canPublish": true,
+  "isAdmin": false
+}

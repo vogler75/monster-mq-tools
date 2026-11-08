@@ -1,0 +1,15 @@
+{
+  "input": {
+    "config": {
+      "password": "",
+      "topicFilters": [],
+      "url": "",
+      "username": ""
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "Neo4j-Client"
+}

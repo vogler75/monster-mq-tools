@@ -1,0 +1,8 @@
+{
+  "input": {
+    "addresses": [],
+    "enabled": false,
+    "name": "my-device"
+  },
+  "type": "OPCUA-Server"
+}

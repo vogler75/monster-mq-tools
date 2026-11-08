@@ -189,6 +189,12 @@ func deviceContract(t *testing.T, broker string) ([]byte, []byte) {
 	if contractError != nil {
 		t.Fatal(contractError)
 	}
+	if broker == "main-src" {
+		return coreSourceContract(t)
+	}
+	if broker == "edge-src" {
+		return edgeSourceContract(t)
+	}
 	if broker == "full" {
 		broker = "main"
 	}

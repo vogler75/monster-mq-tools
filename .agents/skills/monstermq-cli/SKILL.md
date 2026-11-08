@@ -17,6 +17,7 @@ This skill provides operational instructions and command references for using `m
   - CLI flags (must come **before** the command): `--url`, `--host`, `--port`, `--https`, `--user`/`--username`/`-u`, `--pass`/`--password`/`-p`, `--token`, `--mqtt-host`, `--mqtt-port`, `--mqtt-user`, `--mqtt-pass` (MQTT credentials default to the CLI auth user/pass), `--env`/`--env-file <file>` (default `.env`), `--json`, `-i`/`--interactive`, `-h`/`--help`
   - Environment variables: `MQ_URL`, `MQ_HOST`, `MQ_PORT`, `MQ_HTTPS`, `MQ_USER`, `MQ_PASS`, `MQ_TOKEN` (or `GRAPHQL_*` equivalents); `MQ_MQTT_HOST`/`MQTT_HOST`, `MQ_MQTT_PORT`/`MQTT_PORT`, `MQ_MQTT_USER`/`MQTT_USER`, `MQ_MQTT_PASS`/`MQTT_PASS`
   - `.env` files (values only apply when the variable is not already set in the environment)
+  - `--json` can be placed anywhere; machine-readable catalog: `mmq commands --json`; exit codes `0` ok / `1` failed / `2` bad options.
   - Every command supports `-h`/`--help` for its own usage text.
 
 ---
@@ -287,6 +288,91 @@ For automated processing or shell pipelines, put `--json` before the command:
 ```bash
 mmq --json searchTopics "sensors/#"
 ```
+
+---
+
+## Schema-Driven Administration (Use This for Anything Without a Dedicated Command)
+
+Every query and mutation of the connected broker is reachable without a dedicated command. Arguments are validated against the broker's live GraphQL schema (Full or Edge), so an agent never has to guess a JSON shape.
+
+### Discover
+
+```bash
+mmq commands --json                 # machine-readable catalog: commands, options, broker support, exit codes, error shape
+mmq schema                          # every query/mutation: path(args) -> return type
+mmq schema user                     # operations whose path contains "user"
+mmq schema user.createUser          # arguments, descriptions and all nested input types (JSON)
+mmq schema CreateUserInput          # describe one type (input fields, defaults, enum values)
+mmq api template user.createUser    # skeleton of the required arguments
+```
+
+### Call
+
+```bash
+mmq api users                                              # query by path
+mmq api user.createUser --args @examples/api/create-user.json
+mmq api user.createUser username=bob password=secret       # key=value; one input object may be given flat
+mmq api mutation:publish topic=a/b payload=1               # prefix when a name exists as query and mutation
+mmq api user.createUser --args @u.json --dry-run           # print generated GraphQL + variables only
+mmq api session --select 'clientId connected' clientId=c1  # override the result selection
+mmq gql '{ brokers { nodeId version } }'                   # raw GraphQL
+mmq gql @query.graphql --vars '{"name":"x"}'
+```
+
+`--args` accepts inline JSON, `@file`, or `-` (stdin). A JSON array is mapped to the operation's single list argument (`publishBatch`). Output is JSON; password/secret/token fields are redacted unless `--reveal`. Mutations returning `success:false`, a non-empty `errors`, or `false` exit non-zero.
+
+### Noun commands
+
+Friendly aliases over the same engine (`mmq <noun> <verb>`; verbs are queries or mutation names, a prefix such as `create` resolves to `createUser`; a positional operand binds to the first argument):
+
+| Noun | Query verbs | Mutations |
+|---|---|---|
+| `user` | `list` | `user.*` (createUser, updateUser, deleteUser, setPassword, ...) |
+| `archiveGroup` | `list`, `get` | `archiveGroup.*` (create, update, delete, enable, disable, database connections) |
+| `topicSchema` | `list`, `get`, `validate` | `topicSchemaPolicy.*` |
+| `namespace` | `list`, `get`, `match` | `topicNamespace.*` |
+| `flow` | `classes`, `instances`, `nodeTypes` | `flow.*` |
+| `kafka` | `consumerGroups`, `messages`, `offsets` | - |
+| `broker` | `list`, `get` | - |
+| `dataCatalog` (Core) | `types`, `type`, `instances`, `instance`, `relations`, `infer` | `dataCatalog.*` (saveType, deleteType, saveInstance, deleteInstance, saveRelation, deleteRelation, exportCatalog, importCatalog) |
+| `genai` / `ai` | `providers` + fields of the `genai` group (generate, analyzeTopics, proposeDataCatalog) | - |
+| `uns` (Edge only, WinCC OA UNS Modeler) | `list`, `schema`, `prompt`, `validate` | `unsModeler.*` (create, update, delete, toggle, saveDraft, apply, createInWinCCOa, importProposal, startAiRun, cancelAiRun) |
+| `virtualTopicTree` / `vtt` | `list`, `get`, `validate`, `preview` | `save`, `delete` (ungrouped; `save` takes `expectedRevision` for optimistic locking) |
+| `redfish` | `list`, `get`, `sensors` | `save`, `delete`, `toggle` |
+| `rtspCamera` / `camera` (Edge only) | `list`, `get` | `rtspCamera.*` (create, update, delete, start, stop, toggle, triggerSnapshot) |
+| `peerLink` | `status` | - |
+| `winccoa` (Edge only, inside WCCOAmmq) | fields of the `winccoa` browse group (`mmq schema winccoa`) | - |
+| `agent`, `mcpServer`, `genAiProvider` | `list`, `get` | `agent.*`, `mcpServer.*`, `genAiProvider.*` |
+
+Availability (enforced by tests against the Core and Edge source schemas; `mmq commands --json` carries it per command): **Core only** - `topicSchema`, `namespace`, `flow`, `agent`, `mcpServer`, `dataCatalog`; **Edge only** - `uns`, `winccoa`, `rtspCamera`; **both** - `user`, `archiveGroup`, `kafka`, `broker`, `genAiProvider`, `genai`, `peerLink`, `redfish`, `virtualTopicTree`.
+
+### UNS Modeler (Edge, WinCC OA)
+
+Maps WinCC OA datapoints into the UNS (`WINCCOA_TO_UNS`) or onboards MQTT topics into new WinCC OA datapoints (`MQTT_TO_WINCCOA`). Every step is available through `mmq uns`:
+
+```bash
+mmq --json uns schema                        # JSON Schema of the mapping document (add direction=WINCCOA_TO_UNS for the prompt view)
+mmq --json uns prompt direction=MQTT_TO_WINCCOA   # built-in AI system prompt of a direction
+mmq --json uns create --args '{"input":{"name":"line1","config":{"direction":"WINCCOA_TO_UNS","unsRoot":"plant/line1"}}}' --dry-run
+mmq --json uns saveDraft name=line1 document=@mapping.json   # store the draft (validated, issues returned)
+mmq --json uns validate name=line1 document=@mapping.json    # validate without storing
+mmq --json uns apply name=line1              # validate the draft and apply it when it has no errors
+mmq --json uns createInWinCCOa name=line1    # MQTT_TO_WINCCOA: create types/datapoints in WinCC OA
+mmq --json uns startAiRun --args '{"name":"line1","input":{"prompt":"Map all pumps"}}'   # AI proposes a full mapping as the draft
+mmq --json uns toggle name=line1 enabled=true
+mmq --json winccoa --help                    # WinCC OA browsing (only when the Edge broker runs inside WCCOAmmq)
+```
+
+Note: `document` arguments are strings holding the mapping JSON; use `uns schema` to learn the document shape before writing one. The checked-in `gql/edge.gql` snapshot may lag behind a running Edge broker; refresh it with `python make.py gql-fetch`. The CLI itself always follows the connected broker's live schema.
+
+Also: `mmq publishBatch --args '[...]'` and `mmq purgeQueuedMessages clientId=<id>`. Run `mmq <noun> --help` for the verbs, `mmq schema <path>` for exact arguments. On the Edge broker the data catalog schema defines types only (no operations); the data catalog commands exist on Core. Operations absent on the connected broker (e.g. most of these on an Edge broker) fail with "not available on this broker".
+
+### Contract for automation
+
+- `--json` is accepted anywhere on the command line. On failure it prints `{"success":false,"error":"..."}` to stdout (and `Error: ...` to stderr).
+- Exit codes: `0` success, `1` command failed (GraphQL error, `success:false`, I/O or validation), `2` invalid global options.
+- `mmq skill [--install [dir]]` generates a SKILL.md from the catalog (default install: `~/.claude/skills/monstermq-cli/`), so the skill can never drift from the binary.
+- Ready-to-edit inputs: `examples/devices/*.json`, `examples/devices/templates/*.json` (one skeleton per device type), `examples/api/*.json`.
 
 ---
 

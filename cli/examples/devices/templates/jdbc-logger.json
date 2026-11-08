@@ -1,0 +1,16 @@
+{
+  "input": {
+    "config": {
+      "databaseType": "QUESTDB",
+      "jdbcUrl": "",
+      "jsonSchema": {},
+      "topicFilters": [],
+      "username": ""
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "JDBC-Logger"
+}

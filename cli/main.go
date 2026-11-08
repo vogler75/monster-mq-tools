@@ -59,6 +59,14 @@ Commands:
   brokerConfig                                List enabled broker features & capabilities
   device <command>                           Configure devices (device --help)
   scripts, script <command>                  Manage broker scripts, dry-run test, and AI skills (script --help)
+  api <path> [--args json] [k=v ...]         Call ANY query/mutation by path (api describe|template <path>)
+  gql <query|@file|-> [--vars json]          Send a raw GraphQL document
+  schema [filter|Type|path]                  Introspect operations and input types of this broker
+  commands [name]                            Machine-readable command catalog (use with --json)
+  skill [--install]                          Generate/install the agent skill (SKILL.md) from the catalog
+  user|archiveGroup|topicSchema|namespace|flow|kafka|broker|agent|mcpServer|genAiProvider <verb> ...
+                                             Administration via the schema-driven engine (<noun> --help)
+  publishBatch, purgeQueuedMessages          Bulk publish / purge queued messages (JSON args)
 
 Examples:
   mmq                                                       # Start interactive CLI session on localhost:4000
@@ -114,6 +122,9 @@ func main() {
 				i++
 				globalArgs = append(globalArgs, os.Args[i])
 			}
+		} else if arg == "--json" {
+			// --json is accepted anywhere on the command line.
+			jsonMode = true
 		} else {
 			commandArgs = append(commandArgs, arg)
 		}
@@ -142,10 +153,16 @@ func main() {
 	}
 
 	if err := ExecuteCommand(ctx, client, commandArgs); err != nil {
+		if client.cfg.JSONMode && !jsonErrorPrinted {
+			_ = printJSON(map[string]any{"success": false, "error": err.Error()})
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
+
+// jsonErrorPrinted is set by commands that already emitted a structured error.
+var jsonErrorPrinted bool
 
 func isShellCommand(cmd string) bool {
 	switch strings.ToLower(cmd) {
@@ -294,9 +311,26 @@ func ExecuteCommand(ctx context.Context, client *Client, commandArgs []string) e
 		return runHmiSync(ctx, client, subargs)
 	case "device":
 		return runDevice(ctx, client, subargs)
+	case "gql", "graphql":
+		return runGQL(ctx, client, subargs)
+	case "schema":
+		return runSchema(ctx, client, subargs)
+	case "skill":
+		return runSkill(subargs)
+	case "commands", "catalog":
+		return runCommands(client, subargs)
+	case "api":
+		return runAPI(ctx, client, subargs)
+	case "publishBatch":
+		return runAPI(ctx, client, append([]string{"mutation:publishBatch"}, subargs...))
+	case "purgeQueuedMessages":
+		return runAPI(ctx, client, append([]string{"mutation:purgeQueuedMessages"}, subargs...))
 	case "script", "scripts":
 		return runScriptCommand(ctx, client, subargs)
 	default:
+		if n, ok := nounFor(subcmd); ok {
+			return runNoun(ctx, client, n, subargs)
+		}
 		return fmt.Errorf("unknown command '%s'. Run 'mmq --help' or 'help' for usage", subcmd)
 	}
 }

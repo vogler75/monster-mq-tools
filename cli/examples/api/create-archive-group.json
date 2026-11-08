@@ -1,0 +1,8 @@
+{
+  "name": "Sensors",
+  "topicFilter": ["sensors/#"],
+  "lastValType": "MEMORY",
+  "archiveType": "SQLITE",
+  "archiveRetention": "30d",
+  "payloadFormat": "DEFAULT"
+}

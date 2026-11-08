@@ -28,7 +28,9 @@ Whenever you modify, add, or deprecate any feature, command, flag, or configurat
 
 2. **Documentation Synchronization**: Ensure [`cli/README.md`](cli/README.md) and repository [`README.md`](README.md) are updated in tandem with `SKILL.md`.
 
-3. **Verification**: Always run unit tests (`cd cli && go test ./...`) and verify CLI flag parsing before committing changes.
+3. **Catalog & generated skill**: New top-level commands must be added to `cli/catalog.go` (`TestCatalogCoversAllCommands` fails otherwise). `mmq skill` generates an install-ready SKILL.md from the catalog; schema-driven operations (`mmq api`, `mmq <noun>`) need no per-operation code.
+
+4. **Verification**: Always run unit tests (`cd cli && go test ./...`) and verify CLI flag parsing before committing changes.
 
 ---
 

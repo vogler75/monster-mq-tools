@@ -1,0 +1,15 @@
+{
+  "input": {
+    "config": {
+      "authType": "",
+      "endpointUrl": "",
+      "jsonSchema": {},
+      "topicFilters": []
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "TimeBase-Logger"
+}

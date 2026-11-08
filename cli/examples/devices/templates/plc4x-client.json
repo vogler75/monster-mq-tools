@@ -1,0 +1,13 @@
+{
+  "input": {
+    "config": {
+      "connectionString": "",
+      "protocol": "AB_ETHERNET"
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "PLC4X-Client"
+}

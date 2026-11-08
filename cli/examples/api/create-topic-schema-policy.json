@@ -1,0 +1,8 @@
+{
+  "input": {
+    "name": "temperature-v1",
+    "jsonSchema": { "type": "object", "required": ["temp"], "properties": { "temp": { "type": "number" } } },
+    "payloadType": "JSON",
+    "description": "Temperature readings"
+  }
+}

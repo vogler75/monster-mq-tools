@@ -1,0 +1,12 @@
+{
+  "input": {
+    "config": {
+      "brokerUrl": ""
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "MQTT-Client"
+}

@@ -1,0 +1,10 @@
+{
+  "input": {
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*",
+    "streams": []
+  },
+  "type": "Kafka-Server"
+}

@@ -1,0 +1,12 @@
+{
+  "input": {
+    "config": {
+      "endpointUrl": ""
+    },
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "OPCUA-Client"
+}

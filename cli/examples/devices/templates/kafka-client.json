@@ -1,0 +1,10 @@
+{
+  "input": {
+    "config": {},
+    "enabled": false,
+    "name": "my-device",
+    "namespace": "devices/my-device",
+    "nodeId": "*"
+  },
+  "type": "KAFKA-Client"
+}

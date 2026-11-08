@@ -1,0 +1,9 @@
+{
+  "input": {
+    "name": "line1-sensors",
+    "topicFilter": "demo/line1/#",
+    "schemaPolicyName": "temperature-v1",
+    "enabled": true,
+    "description": "All sensors of line 1"
+  }
+}

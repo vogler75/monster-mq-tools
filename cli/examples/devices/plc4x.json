@@ -1,0 +1,15 @@
+{
+  "type": "PLC4X-Client",
+  "input": {
+    "name": "plc4x-example",
+    "namespace": "external/plc",
+    "nodeId": "*",
+    "enabled": false,
+    "config": {
+      "protocol": "MODBUS_TCP",
+      "connectionString": "modbus-tcp:tcp://192.168.1.10:502",
+      "pollingInterval": 1000,
+      "reconnectDelay": 5000
+    }
+  }
+}

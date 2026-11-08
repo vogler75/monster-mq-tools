@@ -1,0 +1,4 @@
+[
+  { "topic": "demo/line1/temperature", "payload": "21.5", "qos": 0, "retained": false },
+  { "topic": "demo/line1/state", "payload": "{\"running\":true}", "format": "JSON", "qos": 1, "retained": true }
+]
