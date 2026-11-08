@@ -79,6 +79,7 @@ type ArchiveGroupInfo {
   lastValType: MessageStoreType!
   archiveType: MessageArchiveType!
   databaseConnectionName: String
+  redisDbNumber: Int
   payloadFormat: PayloadFormat!
   lastValRetention: String
   archiveRetention: String
@@ -191,6 +192,15 @@ type BrokerMetrics {
   timestamp: String!
 }
 
+"""A single message in the chat history"""
+input ChatMessage {
+  """Role of the message sender (user or assistant)"""
+  role: String!
+
+  """Content of the message"""
+  content: String!
+}
+
 input CreateAclRuleInput {
   username: String!
   topicPattern: String!
@@ -206,6 +216,7 @@ input CreateArchiveGroupInput {
   lastValType: MessageStoreType!
   archiveType: MessageArchiveType!
   databaseConnectionName: String
+  redisDbNumber: Int
   payloadFormat: PayloadFormat = DEFAULT
   lastValRetention: String
   archiveRetention: String
@@ -279,6 +290,42 @@ enum DatabaseConnectionType {
   QUESTDB
 }
 
+type DataCatalogInstance {
+  id: String!
+  typeId: String!
+  name: String!
+  baseTopic: String!
+  properties: JSON!
+  createdAt: String
+  updatedAt: String
+}
+
+type DataCatalogProposal {
+  types: [DataCatalogType!]!
+  instances: [DataCatalogInstance!]!
+  relations: [DataCatalogRelation!]!
+  topicsAnalyzed: Int!
+  summary: String
+  error: String
+}
+
+type DataCatalogRelation {
+  sourceId: String!
+  targetId: String!
+  relationType: String!
+}
+
+type DataCatalogType {
+  id: String!
+  namespace: String!
+  name: String!
+  description: String
+  structure: JSON!
+  topicPattern: String
+  createdAt: String
+  updatedAt: String
+}
+
 enum DataFormat {
   JSON
   TEXT
@@ -311,6 +358,137 @@ type ExceptionInfo {
   class: String!
   message: String
   stackTrace: String!
+}
+
+type GenAiProvider {
+  name: String!
+  type: String!
+  model: String
+  apiKey: String
+  endpoint: String
+  serviceVersion: String
+  baseUrl: String
+  temperature: Float!
+  maxTokens: Int
+  enabled: Boolean!
+  source: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+input GenAiProviderInput {
+  type: String!
+  model: String
+  apiKey: String
+  endpoint: String
+  serviceVersion: String
+  baseUrl: String
+  temperature: Float
+  maxTokens: Int
+  enabled: Boolean
+}
+
+type GenAiProviderMutations {
+  create(name: String!, input: GenAiProviderInput!): GenAiProvider!
+  update(name: String!, input: GenAiProviderInput!): GenAiProvider!
+  delete(name: String!): Boolean!
+}
+
+"""GenAI query interface for AI-supported JavaScript coding"""
+type GenAiQuery {
+  """
+  Generate AI response with optional context and documentation.
+  
+  The prompt parameter is required and contains your question or instruction.
+  The context parameter is optional and provides additional background information.
+  The docs parameter is optional and lists documentation files to include as context.
+  """
+  generate(
+    """The main prompt/instruction for the AI"""
+    prompt: String!
+
+    """
+    Optional additional context to help the AI understand your specific use case
+    """
+    context: String
+
+    """Optional list of documentation markdown files to include as context"""
+    docs: [String!]
+  ): GenAiResponse!
+
+  """
+  Analyze MQTT topics using AI.
+  Collects topic values from the LastValueStore and/or directly passed topicData, and sends them to the LLM for analysis.
+  
+  On the first request (empty chatHistory), topic data is included in the prompt.
+  On subsequent requests, only the chat history is sent to continue the conversation.
+  """
+  analyzeTopics(
+    """
+    Archive group to query (defaults to 'Default'; optional if topicData is provided)
+    """
+    archiveGroup: String
+
+    """
+    MQTT topic pattern (supports + and # wildcards; optional if topicData is provided)
+    """
+    topicPattern: String
+
+    """
+    Directly passed list of topics and their values/payloads (e.g. from UI subscriptions or live table)
+    """
+    topicData: [TopicDataInput!]
+
+    """User's question about the topics"""
+    question: String!
+
+    """Custom system prompt (optional)"""
+    systemPrompt: String
+
+    """Max topics to include (default 100; set to 0 for unlimited)"""
+    maxTopics: Int
+
+    """
+    Max value length before truncation (default 1000 chars; set to 0 for unlimited)
+    """
+    maxValueLength: Int
+
+    """
+    Chat history from previous exchanges (optional). When provided, topic data is not re-sent.
+    """
+    chatHistory: [ChatMessage!]
+  ): TopicAnalysisResponse!
+
+  """
+  Analyze MQTT topics and propose a Data Catalog (Object Types, Instances, Relations) using AI.
+  """
+  proposeDataCatalog(
+    """Archive group to query (defaults to 'Default')"""
+    archiveGroup: String
+
+    """MQTT topic pattern to inspect (e.g. 'machine1/#')"""
+    topicPattern: String!
+
+    """Optional custom user guidance or context prompt"""
+    prompt: String
+
+    """Max topics to sample (default 100)"""
+    maxTopics: Int
+  ): DataCatalogProposal!
+}
+
+"""GenAI response containing the AI-generated content and metadata"""
+type GenAiResponse {
+  """The AI-generated text response"""
+  response: String!
+
+  """
+  The specific model that generated this response (e.g., 'gemini-pro', 'claude-3-opus')
+  """
+  model: String
+
+  """Error message if the request failed"""
+  error: String
 }
 
 type Hmi {
@@ -375,6 +553,186 @@ type ImportDeviceConfigResult {
 
 scalar JSON
 
+type KafkaClient {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  config: KafkaClientConfig!
+  enabled: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+  metrics: [KafkaClientMetrics!]!
+  metricsHistory(from: String, to: String, lastMinutes: Int): [KafkaClientMetrics!]!
+}
+
+type KafkaClientConfig {
+  bootstrapServers: String!
+  groupId: String!
+  payloadFormat: KafkaPayloadFormat!
+  extraConsumerConfig: JSON
+  reconnectDelayMs: Long!
+  destinationTopicPrefix: String
+  topicKeyRegex: String
+  topicKeyReplacement: String
+  inboundEnabled: Boolean!
+  outboundEnabled: Boolean!
+  outboundTopicFilters: [String!]!
+  outboundKafkaTopic: String
+  extraProducerConfig: JSON
+  outboundTopicKeyRegex: String
+  outboundTopicKeyReplacement: String
+}
+
+input KafkaClientConfigInput {
+  bootstrapServers: String = "localhost:9092"
+  groupId: String = "monstermq-subscriber"
+  payloadFormat: KafkaPayloadFormat = DEFAULT
+  extraConsumerConfig: JSON
+  reconnectDelayMs: Long = 5000
+  destinationTopicPrefix: String
+  topicKeyRegex: String
+  topicKeyReplacement: String
+  inboundEnabled: Boolean = true
+  outboundEnabled: Boolean = false
+  outboundTopicFilters: [String!] = []
+  outboundKafkaTopic: String
+  extraProducerConfig: JSON
+  outboundTopicKeyRegex: String
+  outboundTopicKeyReplacement: String
+}
+
+input KafkaClientInput {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean = true
+  config: KafkaClientConfigInput!
+}
+
+type KafkaClientMetrics {
+  messagesIn: Float!
+  messagesOut: Float!
+  timestamp: String!
+}
+
+type KafkaClientMutations {
+  create(input: KafkaClientInput!): KafkaClientResult!
+  update(name: String!, input: KafkaClientInput!): KafkaClientResult!
+  delete(name: String!): Boolean!
+  start(name: String!): KafkaClientResult!
+  stop(name: String!): KafkaClientResult!
+  toggle(name: String!, enabled: Boolean!): KafkaClientResult!
+  reassign(name: String!, nodeId: String!): KafkaClientResult!
+}
+
+type KafkaClientResult {
+  success: Boolean!
+  client: KafkaClient
+  errors: [String!]!
+}
+
+type KafkaConsumerGroupInfo {
+  groupId: String!
+  topics: [String!]!
+  lastCommitTime: String!
+  lag: Long!
+}
+
+type KafkaMessageInfo {
+  offset: Long!
+  topic: String!
+  partition: Int!
+  timestamp: String!
+  key: String
+  value: String
+  size: Int!
+}
+
+"""
+Kafka client bridge connects to an external Kafka cluster and republishes consumed
+records as MQTT messages inside MonsterMQ. A single Kafka topic is consumed and each
+record is polled periodically then published to MQTT.
+
+Topic mapping strategy:
+- The Kafka topic consumed is the device namespace
+- For BINARY/TEXT formats: MQTT topic = record key (record dropped if key null)
+- For DEFAULT/JSON formats: value encodes a BrokerMessage whose internal topicName is used
+"""
+enum KafkaPayloadFormat {
+  DEFAULT
+  JSON
+  BINARY
+  TEXT
+}
+
+type KafkaServerInfo {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  host: String!
+  port: Int!
+  advertisedHost: String
+  advertisedPort: Int
+  storeType: String
+  streams: [KafkaStreamMappingInfo!]!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+  status: String!
+}
+
+input KafkaServerInput {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean = true
+  host: String = "0.0.0.0"
+  port: Int = 9092
+  advertisedHost: String
+  advertisedPort: Int
+  storeType: String
+  streams: [KafkaStreamMappingInput!]!
+}
+
+type KafkaServerMutations {
+  add(input: KafkaServerInput!): KafkaServerResult!
+  update(name: String!, input: KafkaServerInput!): KafkaServerResult!
+  delete(name: String!): Boolean!
+  toggle(name: String!, enabled: Boolean!): KafkaServerResult!
+  reassign(name: String!, nodeId: String!): KafkaServerResult!
+  deleteConsumerGroup(groupId: String!): Boolean!
+}
+
+type KafkaServerResult {
+  success: Boolean!
+  server: KafkaServerInfo
+  errors: [String!]!
+}
+
+type KafkaStreamMappingInfo {
+  streamName: String!
+  topicFilter: String!
+  retentionHours: Int!
+  storeType: String
+  allowWrite: Boolean!
+}
+
+input KafkaStreamMappingInput {
+  streamName: String!
+  topicFilter: String!
+  retentionHours: Int = 168
+  storeType: String
+  allowWrite: Boolean = true
+}
+
+type KafkaTopicOffsetInfo {
+  topic: String!
+  earliestOffset: Long!
+  latestOffset: Long!
+}
+
 type LoginResult {
   success: Boolean!
   message: String
@@ -392,6 +750,7 @@ enum MessageArchiveType {
   QUESTDB
   MONGODB
   SQLITE
+  WINCCOA
 }
 
 enum MessageStoreType {
@@ -402,6 +761,7 @@ enum MessageStoreType {
   CRATEDB
   MONGODB
   SQLITE
+  WINCCOA
 }
 
 type MqttClient {
@@ -469,6 +829,13 @@ type MqttClientConnectionConfig {
   receiveMaximum: Int
   maximumPacketSize: Long
   topicAliasMaximum: Int
+  tlsCaCertPath: String
+  tlsClientCertPath: String
+  tlsClientKeyPath: String
+  tlsClientKeyPasswordSet: Boolean!
+  tlsClientKeyFormat: String!
+  tlsAlpnProtocols: [String!]
+  tlsServerName: String
 }
 
 input MqttClientConnectionConfigInput {
@@ -492,6 +859,13 @@ input MqttClientConnectionConfigInput {
   receiveMaximum: Int
   maximumPacketSize: Long
   topicAliasMaximum: Int
+  tlsCaCertPath: String
+  tlsClientCertPath: String
+  tlsClientKeyPath: String
+  tlsClientKeyPassword: String
+  tlsClientKeyFormat: String = "PEM"
+  tlsAlpnProtocols: [String!]
+  tlsServerName: String
 }
 
 input MqttClientInput {
@@ -546,9 +920,17 @@ type Mutation {
   archiveGroup: ArchiveGroupMutations!
   mqttClient: MqttClientMutations!
   hmi: HmiMutations!
+  genAiProvider: GenAiProviderMutations
+  kafkaClient: KafkaClientMutations!
+  kafkaServer: KafkaServerMutations!
   saveRedfishMapping(name: String!, config: RedfishMappingConfigInput!, enabled: Boolean): RedfishResult!
   deleteRedfishMapping(name: String!): Boolean!
   toggleRedfishMapping(name: String!, enabled: Boolean!): RedfishResult!
+  rtspCamera: RtspCameraDeviceMutations!
+  script: ScriptMutations!
+  unsModeler: UnsModelerMutations!
+  saveVirtualTopicTree(input: VirtualTopicTreeInput!, expectedRevision: String): VirtualTopicTreeMutationResult!
+  deleteVirtualTopicTree(id: ID!, expectedRevision: String!): VirtualTopicTreeMutationResult!
   winCCOaDevice: WinCCOaDeviceMutations!
   winCCUaDevice: WinCCUaDeviceMutations!
 }
@@ -569,6 +951,35 @@ enum OrderDirection {
 enum PayloadFormat {
   DEFAULT
   JSON
+}
+
+type PeerLinkInfo {
+  enabled: Boolean!
+  nodeId: String!
+  listen: String
+  tls: Boolean!
+  brokerType: String!
+  brokerVersion: String!
+  protocolVersion: String!
+  peers: [PeerLinkPeer!]!
+  status: JSON
+}
+
+type PeerLinkPeer {
+  nodeId: String!
+  address: String
+  pull: Boolean!
+  serve: Boolean!
+  interest: String!
+  pullState: String
+  serveState: String
+  remote: String
+  lastError: String
+  brokerType: String
+  brokerVersion: String
+  protocolVersion: String
+  source: JSON
+  consumer: JSON
 }
 
 input PublishInput {
@@ -622,9 +1033,54 @@ type Query {
   hmi(name: String!): Hmi
   hmiFiles(name: String!): [DashboardFile!]!
   exportHmiZip(name: String!): String!
+  genAiProviders: [GenAiProvider!]!
+  genAiProvider(name: String!): GenAiProvider
+
+  """
+  Access AI-assisted JavaScript coding features.
+  
+  Requires GenAI to be enabled in configuration and a valid API key.
+  Returns null if GenAI is disabled or not configured.
+  """
+  genai: GenAiQuery
+  kafkaClients(name: String, node: String): [KafkaClient!]!
+  kafkaServers: [KafkaServerInfo!]!
+  kafkaServer(name: String!): KafkaServerInfo
+  kafkaConsumerGroups: [KafkaConsumerGroupInfo!]!
+  kafkaMessages(serverName: String!, topic: String!, startOffset: Long, limit: Int): [KafkaMessageInfo!]!
+  kafkaTopicOffsets(serverName: String!, topic: String!): KafkaTopicOffsetInfo
+  peerLink: PeerLinkInfo!
   redfishMappings: [RedfishMapping!]!
   redfishMapping(name: String!): RedfishMapping
   redfishLiveSensors(chassisId: String): [RedfishSensorStatus!]!
+  rtspCameras(name: String, node: String): [RtspCamera!]!
+  rtspCamera(name: String!): RtspCamera
+  scripts(name: String, nodeId: String): [Script!]!
+  script(name: String!): Script
+  scriptLanguages: [ScriptLanguage!]!
+  scriptDocumentation(language: String): String!
+  scriptSkill(language: String): String!
+  unsModelers(name: String): [UnsModelerDevice!]!
+
+  """
+  Validates a mapping document for a device without storing it (stage 1 or stage 2 issues).
+  """
+  unsModelerValidate(name: String!, document: String!): [UnsModelerIssue!]!
+
+  """
+  The mapping JSON Schema; with a direction the prompt view of that direction.
+  """
+  unsModelerSchema(direction: UnsModelerDirection): String!
+
+  """The built-in system prompt of a direction."""
+  unsModelerDefaultPrompt(direction: UnsModelerDirection!): String!
+  virtualTopicTrees: [VirtualTopicTree!]!
+  virtualTopicTree(id: ID!): VirtualTopicTree
+  validateVirtualTopicTree(input: VirtualTopicTreeInput!): VirtualTopicValidationResult!
+  previewVirtualTopicTree(input: VirtualTopicTreeInput!, topicOrFilter: String!, operation: VirtualTopicOperation!): VirtualTopicPreviewResult!
+
+  """WinCC OA browsing; null when the broker does not run inside WCCOAmmq."""
+  winccoa: WinCCOaQuery
   winCCOaClients(name: String, node: String): [WinCCOaClient!]!
   winCCUaClients(name: String, node: String): [WinCCUaClient!]!
 }
@@ -705,6 +1161,196 @@ type RetainedMessage {
   userProperties: [UserProperty!]
 }
 
+type RtspCamera {
+  name: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: RtspCameraConfig!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+  metrics: [RtspCameraMetrics!]!
+  metricsHistory(from: String, to: String, lastMinutes: Int): [RtspCameraMetrics!]!
+}
+
+type RtspCameraConfig {
+  url: String!
+  transport: RtspTransport!
+  h264DecodeMode: RtspH264DecodeMode!
+  topicPrefix: String!
+  mode: RtspCaptureMode!
+  intervalMs: Int!
+  slots: Int!
+  triggerTopic: String
+  retain: Boolean!
+  qos: Int!
+  publishMetadata: Boolean!
+}
+
+input RtspCameraConfigInput {
+  url: String!
+  transport: RtspTransport = TCP
+  h264DecodeMode: RtspH264DecodeMode = FULL
+  topicPrefix: String!
+  mode: RtspCaptureMode = CONTINUOUS
+  intervalMs: Int = 1000
+  slots: Int = 5
+  triggerTopic: String
+  retain: Boolean = true
+  qos: Int = 0
+  publishMetadata: Boolean = true
+}
+
+type RtspCameraDeviceMutations {
+  create(input: RtspCameraInput!): RtspCameraResult!
+  update(name: String!, input: RtspCameraInput!): RtspCameraResult!
+  delete(name: String!): Boolean!
+  start(name: String!): RtspCameraResult!
+  stop(name: String!): RtspCameraResult!
+  toggle(name: String!, enabled: Boolean!): RtspCameraResult!
+  triggerSnapshot(name: String!): RtspCameraResult!
+}
+
+input RtspCameraInput {
+  name: String!
+  nodeId: String!
+  enabled: Boolean = true
+  config: RtspCameraConfigInput!
+}
+
+type RtspCameraMetrics {
+  connected: Boolean!
+  framesReceived: Float!
+  snapshotsPublished: Float!
+  currentSlot: Int!
+  lastSnapshotAt: String
+  lastError: String
+  timestamp: String!
+}
+
+type RtspCameraResult {
+  success: Boolean!
+  camera: RtspCamera
+  errors: [String!]!
+}
+
+enum RtspCaptureMode {
+  CONTINUOUS
+  TRIGGERED
+  BOTH
+}
+
+enum RtspH264DecodeMode {
+  FULL
+  KEYFRAMES_ONLY
+}
+
+enum RtspTransport {
+  TCP
+  UDP
+}
+
+type Script {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: ScriptConfig!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+  executionCount: Long
+  errorCount: Long
+  lastExecutionTime: String
+  lastExecutionStatus: String
+  recentLogs: [String!]!
+}
+
+type ScriptConfig {
+  language: String!
+  script: String!
+  triggerType: ScriptTriggerType!
+  topicFilters: [String!]!
+  triggerOnChangeOnly: Boolean
+  timerIntervalMs: Int
+  instanceMode: ScriptInstanceMode!
+  timeoutMs: Int
+  description: String
+}
+
+input ScriptConfigInput {
+  language: String! = "starlark"
+  script: String!
+  triggerType: ScriptTriggerType! = TOPIC
+  topicFilters: [String!]! = []
+  triggerOnChangeOnly: Boolean = false
+  timerIntervalMs: Int = 0
+  instanceMode: ScriptInstanceMode! = SINGLETON
+  timeoutMs: Int = 200
+  description: String
+}
+
+input ScriptInput {
+  name: String!
+  namespace: String! = "script"
+  nodeId: String! = "local"
+  enabled: Boolean = true
+  config: ScriptConfigInput!
+}
+
+enum ScriptInstanceMode {
+  SINGLETON
+  MULTI_INSTANCE
+}
+
+type ScriptLanguage {
+  name: String!
+  displayName: String!
+  description: String
+  isDefault: Boolean
+  documentation: String!
+  skill: String!
+}
+
+type ScriptMutations {
+  create(input: ScriptInput!): ScriptResult!
+  update(name: String!, input: ScriptInput!): ScriptResult!
+  delete(name: String!): Boolean!
+  toggle(name: String!, enabled: Boolean!): ScriptResult!
+  start(name: String!): ScriptResult!
+  stop(name: String!): ScriptResult!
+  test(input: ScriptInput!, testTopic: String, testPayload: String, testArgs: String): ScriptTestResult!
+}
+
+type ScriptPublishedMessage {
+  topic: String!
+  payload: String!
+  qos: Int!
+  retain: Boolean!
+}
+
+type ScriptResult {
+  script: Script
+  success: Boolean!
+  errors: [String!]!
+}
+
+type ScriptTestResult {
+  success: Boolean!
+  returnValue: String
+  outputMessages: [ScriptPublishedMessage!]!
+  logs: [String!]!
+  errors: [String!]!
+  executionTimeMs: Float!
+}
+
+enum ScriptTriggerType {
+  TOPIC
+  TIMER
+  BOTH
+  CALLABLE
+}
+
 type Session {
   clientId: String!
   nodeId: String!
@@ -781,6 +1427,30 @@ type Topic {
   value(format: DataFormat = JSON): TopicValue
 }
 
+"""Result of topic analysis with metadata"""
+type TopicAnalysisResponse {
+  """The AI-generated analysis"""
+  response: String!
+
+  """Number of topics included in context"""
+  topicsAnalyzed: Int!
+
+  """The model used"""
+  model: String
+
+  """Error message if failed"""
+  error: String
+}
+
+"""Topic and its associated value/payload for AI analysis"""
+input TopicDataInput {
+  """MQTT topic name"""
+  topic: String!
+
+  """Topic value or payload string"""
+  value: String
+}
+
 type TopicUpdate {
   topic: String!
   payload: String!
@@ -810,6 +1480,334 @@ type TopicValue {
   userProperties: [UserProperty!]
 }
 
+type UnsModelerAiEvent {
+  time: String!
+
+  """start, tool_call, tool_result, text, feedback"""
+  kind: String!
+  name: String
+  detail: String
+  error: String
+}
+
+type UnsModelerAiRun {
+  id: String!
+
+  """RUNNING, SUCCEEDED, FAILED or CANCELLED"""
+  status: String!
+  provider: String!
+  model: String
+  startedAt: String!
+  finishedAt: String
+  steps: Int!
+  toolCalls: Int!
+  inputTokens: Int!
+  outputTokens: Int!
+  error: String
+
+  """
+  The proposal was applied (Direction A) or created (Direction B) by approval mode AUTO.
+  """
+  applied: Boolean!
+  issues: [UnsModelerIssue!]!
+  events: [UnsModelerAiEvent!]!
+}
+
+input UnsModelerAiRunInput {
+  prompt: String
+
+  """Context document: text, Markdown, PDF or DOCX, base64 encoded."""
+  documentBase64: String
+  documentName: String
+
+  """Direction A: scope of the analysis."""
+  selection: [UnsModelerSelectionItemInput!]
+
+  """
+  Direction A: allow browsing beyond the selection (bindings stay inside it).
+  """
+  allowBeyondSelection: Boolean
+
+  """Direction B: LIVE or ARCHIVE topic source."""
+  topicMode: String
+  archiveGroup: String
+  topicFilters: [String!]
+  maxTopics: Int
+
+  """
+  Direction B: topics and values the dashboard collected via topicUpdates (LIVE); used in addition to retained messages.
+  """
+  topicData: [TopicDataInput!]
+}
+
+type UnsModelerAiRunResult {
+  success: Boolean!
+  errors: [String!]!
+  run: UnsModelerAiRun
+}
+
+enum UnsModelerApprovalMode {
+  REVIEW
+  AUTO
+}
+
+type UnsModelerConfig {
+  direction: UnsModelerDirection!
+  approvalMode: UnsModelerApprovalMode!
+
+  """
+  Editable prompt of the device's direction; empty uses the built-in prompt.
+  """
+  systemPrompt: String
+  aiMaxSteps: Int!
+  aiTimeoutSec: Int!
+  aiTokenBudget: Int!
+  redundancy: UnsModelerRedundancy!
+
+  """Direction A: UNS subtree of the device."""
+  unsRoot: String
+
+  """Direction A: <uns-topic>/..set writes to WinCC OA."""
+  allowWrite: Boolean!
+
+  """
+  Direction A: default topic semantics as JSON text ($defs/TopicSemantics).
+  """
+  topicDefaults: String
+
+  """
+  Direction A: default payload fields as JSON text ($defs/PayloadFields).
+  """
+  payloadDefaults: String
+
+  """Direction B: mandatory prefix of created types and datapoints."""
+  oaPrefix: String
+
+  """Direction B: write values after create."""
+  flowEnabled: Boolean!
+
+  """Direction B: archive values on created datapoints."""
+  oaArchiveEnabled: Boolean!
+
+  """
+  Direction B: default archive group for created datapoints (empty or null disables default archiving).
+  """
+  oaArchiveGroup: String
+}
+
+input UnsModelerConfigInput {
+  """Fixed at creation; an update with a different direction is rejected."""
+  direction: UnsModelerDirection!
+  approvalMode: UnsModelerApprovalMode
+  systemPrompt: String
+  aiMaxSteps: Int
+  aiTimeoutSec: Int
+  aiTokenBudget: Int
+  redundancy: UnsModelerRedundancy
+  unsRoot: String
+  allowWrite: Boolean
+  topicDefaults: String
+  payloadDefaults: String
+  oaPrefix: String
+  flowEnabled: Boolean
+  oaArchiveEnabled: Boolean
+  oaArchiveGroup: String
+}
+
+type UnsModelerCreatePlan {
+  types: Int!
+  datapoints: Int!
+  configWrites: Int!
+  excluded: Int!
+}
+
+type UnsModelerCreateResult {
+  success: Boolean!
+  errors: [String!]!
+  issues: [UnsModelerIssue!]!
+  objects: [UnsModelerObjectResult!]!
+  configWrites: Int!
+}
+
+type UnsModelerDevice {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  isOnCurrentNode: Boolean!
+  config: UnsModelerConfig!
+  status: UnsModelerStatus!
+
+  """Current draft mapping document as JSON text."""
+  draft: String
+
+  """Applied mapping document as JSON text."""
+  applied: String
+
+  """Live state per published topic (A3 live monitor)."""
+  liveTopics: [UnsModelerTopicStatus!]!
+
+  """
+  The running or last AI run since broker start; details are in systemLogs.
+  """
+  aiRun: UnsModelerAiRun
+
+  """Direction B: what Create in WinCC OA would do with the draft."""
+  createPlan: UnsModelerCreatePlan
+}
+
+input UnsModelerDeviceInput {
+  name: String!
+  namespace: String
+  nodeId: String
+  enabled: Boolean = true
+  config: UnsModelerConfigInput!
+}
+
+enum UnsModelerDirection {
+  """Direction A: WinCC OA datapoints published into the UNS"""
+  WINCCOA_TO_UNS
+
+  """Direction B: MQTT topics into new WinCC OA datapoints"""
+  MQTT_TO_WINCCOA
+}
+
+type UnsModelerIssue {
+  severity: UnsModelerSeverity!
+
+  """
+  JSON Pointer into the document (or the device settings); empty is the whole document.
+  """
+  path: String!
+  message: String!
+}
+
+type UnsModelerMappingResult {
+  success: Boolean!
+
+  """
+  The document was stored (drafts are stored with issues unless too large or not JSON).
+  """
+  stored: Boolean!
+  document: String
+  errors: [String!]!
+  issues: [UnsModelerIssue!]!
+}
+
+type UnsModelerMutations {
+  create(input: UnsModelerDeviceInput!): UnsModelerResult!
+  update(name: String!, input: UnsModelerDeviceInput!): UnsModelerResult!
+  delete(name: String!): Boolean!
+  toggle(name: String!, enabled: Boolean!): UnsModelerResult!
+
+  """Stores the draft; nodes without id get one."""
+  saveDraft(name: String!, document: String!): UnsModelerMappingResult!
+
+  """Validates the draft and applies it when it has no errors."""
+  apply(name: String!): UnsModelerMappingResult!
+
+  """
+  Direction B: validates the draft and creates its types and datapoints in WinCC OA; then the value flow starts.
+  """
+  createInWinCCOa(name: String!): UnsModelerCreateResult!
+
+  """
+  Direction B: imports a hand-written proposal; source is stamped from the topic
+  selection, then it is validated like an AI answer and stored as the draft.
+  """
+  importProposal(name: String!, document: String!, topicMode: String, archiveGroup: String, topicFilters: [String!]!, topicData: [TopicDataInput!]): UnsModelerMappingResult!
+
+  """
+  Starts an AI run that proposes a full mapping document (stored as the draft).
+  """
+  startAiRun(name: String!, input: UnsModelerAiRunInput!): UnsModelerAiRunResult!
+
+  """
+  Requests cancellation of the running AI analysis. Already completed writes are not undone.
+  """
+  cancelAiRun(name: String!): UnsModelerAiRunResult!
+}
+
+type UnsModelerObjectResult {
+  """type or datapoint"""
+  kind: String!
+  name: String!
+
+  """created, skipped, failed or excluded"""
+  status: String!
+  message: String
+  configWrites: Int!
+}
+
+enum UnsModelerRedundancy {
+  HOT_STANDBY
+  COLD_STANDBY
+  ALWAYS
+}
+
+type UnsModelerResult {
+  success: Boolean!
+  device: UnsModelerDevice
+  errors: [String!]!
+  issues: [UnsModelerIssue!]!
+}
+
+"""One item of the WinCC OA browser selection (Direction A)."""
+input UnsModelerSelectionItemInput {
+  """type, datapoint or element"""
+  kind: String!
+  system: String
+  type: String!
+  datapoint: String
+  path: String
+  pattern: String
+}
+
+enum UnsModelerSeverity {
+  ERROR
+  WARNING
+  INFO
+}
+
+type UnsModelerStatus {
+  """
+  The device runs on this node (enabled, embedded, Direction A with a runtime).
+  """
+  running: Boolean!
+
+  """The broker is ACTIVE for this device (role gate)."""
+  active: Boolean!
+  topics: Int!
+  dpes: Long!
+  published: Long!
+  writes: Long!
+  errors: Long!
+  lastApplied: String
+  applyError: String
+}
+
+type UnsModelerTopicStatus {
+  topic: String!
+  dpe: String!
+
+  """Current value as JSON text."""
+  value: String
+  status: Long
+  published: Long!
+
+  """Direction A: last publish; Direction B: last write into WinCC OA."""
+  lastPublish: String
+
+  """
+  Direction B: source time of the last write, read from the payload (timePath); null when the receive time was used.
+  """
+  sourceTime: String
+  lastError: String
+  lastErrorAt: String
+}
+
 input UpdateAclRuleInput {
   id: String!
   username: String
@@ -826,6 +1824,7 @@ input UpdateArchiveGroupInput {
   lastValType: MessageStoreType
   archiveType: MessageArchiveType
   databaseConnectionName: String
+  redisDbNumber: Int
   payloadFormat: PayloadFormat
   lastValRetention: String
   archiveRetention: String
@@ -895,6 +1894,103 @@ input UserPropertyInput {
   value: String!
 }
 
+enum VirtualTopicAccess {
+  READ_ONLY
+  READ_WRITE
+}
+
+type VirtualTopicBinding {
+  kind: VirtualTopicBindingKind!
+  target: String!
+  access: VirtualTopicAccess!
+}
+
+input VirtualTopicBindingInput {
+  kind: VirtualTopicBindingKind!
+  target: String!
+  access: VirtualTopicAccess = READ_ONLY
+}
+
+enum VirtualTopicBindingKind {
+  EXACT
+  SUBTREE
+}
+
+type VirtualTopicIssue {
+  code: String!
+  nodeId: ID
+  path: String
+  message: String!
+}
+
+type VirtualTopicNode {
+  id: ID!
+  parentId: ID
+  segment: String!
+  description: String
+  binding: VirtualTopicBinding
+}
+
+input VirtualTopicNodeInput {
+  id: ID!
+  parentId: ID
+  segment: String!
+  description: String
+  binding: VirtualTopicBindingInput
+}
+
+enum VirtualTopicOperation {
+  PUBLISH
+  SUBSCRIBE
+  PROJECT
+}
+
+type VirtualTopicPreviewResult {
+  routes: [VirtualTopicRoute!]!
+  errors: [VirtualTopicIssue!]!
+}
+
+type VirtualTopicRoute {
+  nodeId: ID!
+  virtualPath: String!
+  canonicalPath: String!
+  access: VirtualTopicAccess!
+}
+
+type VirtualTopicTree {
+  schemaVersion: Int!
+  id: ID!
+  name: String!
+  rootPath: String!
+  description: String
+  enabled: Boolean!
+  revision: String!
+  nodes: [VirtualTopicNode!]!
+}
+
+input VirtualTopicTreeInput {
+  schemaVersion: Int!
+  id: ID!
+  name: String!
+  rootPath: String!
+  description: String
+  enabled: Boolean = true
+  nodes: [VirtualTopicNodeInput!]!
+}
+
+type VirtualTopicTreeMutationResult {
+  success: Boolean!
+  tree: VirtualTopicTree
+  appliedRevision: String
+  errors: [VirtualTopicIssue!]!
+}
+
+type VirtualTopicValidationResult {
+  valid: Boolean!
+  errors: [VirtualTopicIssue!]!
+  warnings: [VirtualTopicIssue!]!
+}
+
 type WinCCOaAddress {
   query: String!
   topic: String!
@@ -909,6 +2005,27 @@ input WinCCOaAddressInput {
   description: String
   answer: Boolean = false
   retained: Boolean = false
+}
+
+"""
+A WinCC OA value archive group (NGA _NGA_Group, HDB _ValueArchive, or RDB _RDBArchiveGroups).
+"""
+type WinCCOaArchiveGroup {
+  """
+  Short group name used in mapping documents and settings, e.g. EVENT, DEFAULT, ValueArchive_0.
+  """
+  name: String!
+
+  """
+  Underlying WinCC OA datapoint name, e.g. _NGA_G_EVENT or _ValueArchive_0.
+  """
+  dpName: String!
+
+  """Human-readable display name from WinCC OA."""
+  displayName: String!
+
+  """Archive backend kind: NGA, HDB, or RDB."""
+  kind: String!
 }
 
 type WinCCOaClient {
@@ -969,6 +2086,20 @@ input WinCCOaConnectionConfigInput {
   addresses: [WinCCOaAddressInput!]
 }
 
+type WinCCOaDatapoint {
+  """Datapoint name without system prefix."""
+  name: String!
+  system: String!
+  type: String!
+}
+
+type WinCCOaDatapointPage {
+  items: [WinCCOaDatapoint!]!
+  total: Int!
+  offset: Int!
+  limit: Int!
+}
+
 type WinCCOaDeviceMutations {
   create(input: WinCCOaClientInput!): WinCCOaClientResult!
   update(name: String!, input: WinCCOaClientInput!): WinCCOaClientResult!
@@ -982,10 +2113,85 @@ type WinCCOaDeviceMutations {
   deleteAddress(deviceName: String!, query: String!): WinCCOaClientResult!
 }
 
+type WinCCOaElement {
+  """Full DPE name, System:DP.path (the root as System:DP.)."""
+  dpe: String!
+  path: String!
+  name: String!
+  parent: String!
+  depth: Int!
+  elementType: String!
+  valueElement: Boolean!
+  typeReference: String
+  childCount: Int!
+}
+
+type WinCCOaElementInfo {
+  dpe: String!
+  exists: Boolean!
+
+  """Why the element could not be read (missing DPE, unavailable system)."""
+  error: String
+
+  """Datapoint type of the datapoint."""
+  type: String
+  elementType: String
+  valueElement: Boolean!
+  unit: String
+  description: String
+  format: String
+
+  """
+  Current online value as JSON text (blob as base64 string, NaN as null).
+  """
+  value: String
+
+  """Source time of the value, RFC 3339 with milliseconds."""
+  stime: String
+
+  """Raw _online.._status bits."""
+  status: Long
+}
+
 enum WinCCOaMessageFormat {
   JSON_ISO
   JSON_MS
   RAW_VALUE
+}
+
+type WinCCOaQuery {
+  """Local system and the connected or known remote systems."""
+  systems: [WinCCOaSystem!]!
+
+  """
+  Datapoint type names (dpTypes pattern); internal and MMQ store types are left out.
+  """
+  types(system: String, pattern: String = "*"): [String!]!
+  typeStructure(system: String, type: String!): WinCCOaTypeStructure!
+
+  """
+  Datapoints (dpNames pattern without system and element part), sorted, paged; limit at most 1000.
+  """
+  datapoints(system: String, pattern: String = "*", type: String, limit: Int = 500, offset: Int = 0): WinCCOaDatapointPage!
+
+  """Element tree of a datapoint (name with optional system prefix)."""
+  elements(dp: String!): [WinCCOaElement!]!
+
+  """
+  Metadata and current value of at most 200 DPEs; a missing DPE is reported per item.
+  """
+  elementInfo(dpes: [String!]!): [WinCCOaElementInfo!]!
+
+  """
+  Value archive groups available in the WinCC OA system (NGA, HDB/ValueArchive, RDB).
+  """
+  archiveGroups(system: String): [WinCCOaArchiveGroup!]!
+}
+
+type WinCCOaSystem {
+  name: String!
+  local: Boolean!
+  connected: Boolean!
 }
 
 type WinCCOaTransformConfig {
@@ -1004,6 +2210,39 @@ input WinCCOaTransformConfigInput {
   regexReplacement: String
 }
 
+"""
+One node of a datapoint type or datapoint, listed depth-first (parents before children).
+"""
+type WinCCOaTypeElement {
+  """Dotted path below the root; empty for the root."""
+  path: String!
+
+  """Last path level; the type (or datapoint) name for the root."""
+  name: String!
+
+  """Path of the parent node; empty for the root and its direct children."""
+  parent: String!
+  depth: Int!
+
+  """
+  WinCC OA element type, e.g. float, int, struct, dyn_string, langString, typeref.
+  """
+  elementType: String!
+
+  """True for a value element (not a structure node)."""
+  valueElement: Boolean!
+
+  """Referenced type of a typeref node."""
+  typeReference: String
+  childCount: Int!
+}
+
+type WinCCOaTypeStructure {
+  system: String!
+  type: String!
+  elements: [WinCCOaTypeElement!]!
+}
+
 type WinCCUaAddress {
   type: WinCCUaAddressType!
   topic: String!
@@ -1014,6 +2253,10 @@ type WinCCUaAddress {
   systemNames: [String!]
   filterString: String
   pipeTagMode: String
+  tagName: String
+  jsonPath: String
+  timestampJsonPath: String
+  timestampFormat: String
 }
 
 input WinCCUaAddressInput {
@@ -1026,11 +2269,16 @@ input WinCCUaAddressInput {
   systemNames: [String!]
   filterString: String
   pipeTagMode: String = "SINGLE"
+  tagName: String
+  jsonPath: String
+  timestampJsonPath: String
+  timestampFormat: String
 }
 
 enum WinCCUaAddressType {
   TAG_VALUES
   ACTIVE_ALARMS
+  TAG_WRITE
 }
 
 type WinCCUaClient {
@@ -1070,6 +2318,7 @@ type WinCCUaConnectionConfig {
   dataAccessMode: WinCCUaDataAccessMode!
   graphqlEndpoint: String
   websocketEndpoint: String
+  trustAllCertificates: Boolean!
   username: String
   password: String
   pipePath: String
@@ -1084,6 +2333,7 @@ input WinCCUaConnectionConfigInput {
   dataAccessMode: WinCCUaDataAccessMode = GRAPHQL
   graphqlEndpoint: String
   websocketEndpoint: String
+  trustAllCertificates: Boolean = false
   username: String
   password: String
   pipePath: String
